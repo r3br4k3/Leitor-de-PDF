@@ -55,8 +55,9 @@ function buildSelectableTextLayer(textContent, container, viewport) {
     // Combina transformacao do item com a do viewport (espaco CSS)
     const tx = multiplyMatrix(vt, item.transform);
 
-    // Altura da fonte = magnitude do vetor Y transformado
-    const fontHeight = Math.max(Math.hypot(tx[2], tx[3]), 4);
+    // Altura da fonte = magnitude do vetor Y transformado, com limite para mobile.
+    const rawFontHeight = Math.max(Math.hypot(tx[2], tx[3]), 4);
+    const fontHeight = Math.min(Math.max(rawFontHeight, 8), 28);
 
     // Ascendente aproximado (80% da altura cobre a maioria das fontes)
     const ascent = fontHeight * 0.80;
