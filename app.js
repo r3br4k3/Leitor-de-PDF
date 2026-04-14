@@ -29,6 +29,75 @@ function clearPdfPreview() {
   pdfCanvasContainer.innerHTML = "";
 }
 
+// Multiplica duas matrizes de transformacao 2D (arrays de 6 elementos)
+function multiplyMatrix(m1, m2) {
+  return [
+    m1[0] * m2[0] + m1[2] * m2[1],
+    m1[1] * m2[0] + m1[3] * m2[1],
+    m1[0] * m2[2] + m1[2] * m2[3],
+    m1[1] * m2[2] + m1[3] * m2[3],
+    m1[0] * m2[4] + m1[2] * m2[5] + m1[4],
+    m1[1] * m2[4] + m1[3] * m2[5] + m1[5],
+  ];
+}
+
+// Renderiza spans transparentes selecionaveis sobre o canvas do PDF.
+// Funciona em Chrome, Firefox, Safari, iOS e Android.
+const measureCanvas = document.createElement("canvas");
+const measureCtx = measureCanvas.getContext("2d");
+
+function buildSelectableTextLayer(textContent, container, viewport) {
+  const vt = viewport.transform;
+
+  for (const item of textContent.items) {
+    if (!item.str || !item.str.trim()) continue;
+
+    // Combina transformacao do item com a do viewport (espaco CSS)
+    const tx = multiplyMatrix(vt, item.transform);
+
+    // Altura da fonte = magnitude do vetor Y transformado
+    const fontHeight = Math.max(Math.hypot(tx[2], tx[3]), 4);
+
+    // Ascendente aproximado (80% da altura cobre a maioria das fontes)
+    const ascent = fontHeight * 0.80;
+    const left = tx[4];
+    const top  = tx[5] - ascent;
+
+    // Calcula scaleX para ajustar a largura real do texto ao espaco do PDF
+    let scaleX = 1;
+    if (item.width > 0 && item.str.length > 0) {
+      const expectedPx = item.width * Math.hypot(tx[0], tx[1]);
+      measureCtx.font = `${fontHeight}px sans-serif`;
+      const measuredPx = measureCtx.measureText(item.str).width;
+      if (measuredPx > 0) scaleX = expectedPx / measuredPx;
+    }
+
+    const span = document.createElement("span");
+    span.textContent = item.str;
+
+    // Estilos inline para maxima compatibilidade entre navegadores
+    span.style.cssText = [
+      "position:absolute",
+      `left:${left.toFixed(2)}px`,
+      `top:${top.toFixed(2)}px`,
+      `font-size:${fontHeight.toFixed(2)}px`,
+      "line-height:1",
+      `transform:scaleX(${scaleX.toFixed(4)})`,
+      "transform-origin:0 0",
+      "color:transparent",
+      "white-space:pre",
+      "cursor:text",
+      "user-select:text",
+      "-webkit-user-select:text",
+      "-moz-user-select:text",
+      "pointer-events:auto",
+      "touch-action:auto",
+    ].join(";");
+
+    container.appendChild(span);
+  }
+}
+
 function normalizeAddress(line) {
   return line
     .replace(/\s+/g, " ")
@@ -302,9 +371,7 @@ async function renderAndExtract(file) {
 
     await page.render({ canvasContext: context, viewport: renderViewport }).promise;
 
-    if (typeof pdfjsLib.renderTextLayer === "function") {
-      pdfjsLib.renderTextLayer({ textContentSource: textContent, container: textLayer, viewport });
-    }
+    buildSelectableTextLayer(textContent, textLayer, viewport);
 
     allLines.push(...extractPageLines(textContent.items));
   }
