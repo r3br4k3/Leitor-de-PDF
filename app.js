@@ -36,7 +36,25 @@ function normalizeAddress(line) {
     .trim();
 }
 
-const IGNORED_EXACT_LINES = new Set([
+// ─── Padroes de deteccao ────────────────────────────────────────────────────
+
+const RGX = {
+  street:   /\b(rua|r\.|av\.?|avenida|travessa|trav\.?|estrada|rodovia|alameda|praca|pca\.?|largo|viela|logradouro|condominio|cond\.?|quadra|qd\.?|lote|lt\.?)\b/i,
+  number:   /\bn[o°º]?\s*[:\.]?\s*\d{1,5}\b|\b\d{1,5}\s*[,\-\/]\s*|\bno\.?\s*\d{1,5}\b|\bnumero\s*\d{1,5}\b/i,
+  cep:      /\b\d{5}-?\d{3}\b/,
+  bairro:   /\b(bairro|bro\.?|vila|jardim|jd\.?|parque|pk\.?|setor|residencial|res\.?|conjunto|cj\.?)\b/i,
+  cidade:   /\b[A-Za-zÀ-ú]{3,}(?:\s+[A-Za-zÀ-ú]{2,})*\s*[-\/,]\s*[A-Z]{2}\b/,
+  label:    /\b(endere[cç]o|local|localidade|destino|instalacao|entrega|cobranca|correspondencia)\s*[:\-]?/i,
+  cnpj:     /\b\d{2}\.\d{3}\.\d{3}\/\d{4}-\d{2}\b/,
+  cpf:      /\b\d{3}\.\d{3}\.\d{3}-\d{2}\b/,
+  fone:     /\(?\d{2}\)?\s*\d{4,5}-?\d{4}/,
+  cepSolo:  /^\d{5}-?\d{3}$/,
+  numOnly:  /^\d{1,12}$/,
+  url:      /https?:\/\/|www\./i,
+  email:    /@\w+\.\w+/,
+};
+
+const NOISE_LINES = new Set([
   "mactel sistemas de seguranca ltda",
   "02.256.145/0001-83",
   "www.mactelrs.com.br",
@@ -47,65 +65,125 @@ const IGNORED_EXACT_LINES = new Set([
   "0962670669",
 ]);
 
-const IGNORED_PARTIAL_REGEX = [
-  /\bmactel\b/i,
-  /\b\d{2}\.\d{3}\.\d{3}\/\d{4}-\d{2}\b/, // CNPJ
-  /\bwww\.mactelrs\.com\.br\b/i,
-  /^\(?\d{2}\)?\s*\d{4,5}-?\d{4}$/,
-  /^\d{10,12}$/,
-  /^\d{2}\.\d{3}-\d{3}$/,
-];
+// ─── Score de uma linha ──────────────────────────────────────────────────────
 
-function shouldIgnoreLine(line) {
-  const normalized = normalizeAddress(line).toLowerCase();
-  if (!normalized) return true;
+function scoreLine(line) {
+  const l = line.toLowerCase();
+  let score = 0;
 
-  if (IGNORED_EXACT_LINES.has(normalized)) {
-    return true;
-  }
+  // Ruido fixo
+  if (NOISE_LINES.has(l)) return -99;
 
-  return IGNORED_PARTIAL_REGEX.some((regex) => regex.test(normalized));
+  // Padroes de ruido genericos
+  if (RGX.cnpj.test(l))   return -99;
+  if (RGX.cpf.test(l))    return -20;
+  if (RGX.url.test(l))    return -20;
+  if (RGX.email.test(l))  return -20;
+  if (RGX.cepSolo.test(l.trim())) return -10; // CEP isolado nao e endereco
+  if (RGX.numOnly.test(l.trim())) return -10;
+  if (RGX.fone.test(l) && l.trim().length < 20) return -20;
+
+  // Pontuacao positiva
+  if (RGX.label.test(l))   score += 30; // Rotulo explicito ("Endereco:")
+  if (RGX.street.test(l))  score += 40; // Tipo de logradouro
+  if (RGX.number.test(l))  score += 20; // Numero predial
+  if (RGX.bairro.test(l))  score += 15; // Bairro/Vila/Jardim
+  if (RGX.cep.test(l))     score += 25; // CEP embutido na linha
+  if (RGX.cidade.test(l))  score += 10; // Cidade - UF
+
+  return score;
 }
 
+// ─── Janela de contexto em torno de uma ancora ──────────────────────────────
+
+function buildBlock(lines, pivot, radius = 3) {
+  const start = Math.max(0, pivot - radius);
+  const end   = Math.min(lines.length - 1, pivot + radius);
+  const block = [];
+
+  for (let i = start; i <= end; i += 1) {
+    const s = scoreLine(lines[i]);
+    if (s > 0) block.push(lines[i]);
+  }
+
+  return block.join(", ").replace(/,\s*,/g, ",").trim();
+}
+
+// ─── Motor principal de deteccao por score ───────────────────────────────────
+
 function findAddresses(linesInput) {
-  const lines = linesInput.map((line) => normalizeAddress(line)).filter((line) => line && !shouldIgnoreLine(line));
+  const lines = linesInput
+    .map(normalizeAddress)
+    .filter(Boolean);
 
-  const streetRegex =
-    /\b(rua|r\.|av\.?|avenida|travessa|estrada|rodovia|alameda|praca|largo|viela|logradouro|condominio)\b/i;
-  const cepRegex = /\b\d{5}-?\d{3}\b/;
-  const numberRegex = /\b\d{1,5}\b/;
-  const numeroMarcadorRegex = /\bn\s*[oº°]\s*[:\.]?\s*\d{1,5}\b/i;
-  const bairroRegex = /\bbairro\s*[:\-]?\s*[a-z0-9\s\-]+$/i;
+  const THRESHOLD = 30; // Score minimo para candidato
+  const usedIndexes = new Set();
+  const results = [];
+  const seen = new Set();
 
-  const candidates = [];
-  for (let index = 0; index < lines.length; index += 1) {
-    const line = lines[index];
-    const nextLine = lines[index + 1] || "";
+  // Passo 1 — Ancoras por CEP (precisao alta)
+  for (let i = 0; i < lines.length; i += 1) {
+    if (!RGX.cep.test(lines[i])) continue;
 
-    const hasStreet = streetRegex.test(line);
-    const hasCep = cepRegex.test(line);
-    const hasNumber = numberRegex.test(line);
-    const hasNumeroMarcador = numeroMarcadorRegex.test(line);
-    const nextHasBairro = bairroRegex.test(nextLine);
-    const thisHasBairro = bairroRegex.test(line);
-
-    if ((hasStreet && (hasNumber || hasNumeroMarcador || hasCep)) || (hasStreet && nextHasBairro) || (hasStreet && thisHasBairro)) {
-      const merged = nextHasBairro ? `${line}, ${nextLine}` : line;
-      candidates.push(merged);
-      if (nextHasBairro) index += 1;
+    // Tenta expandir bloco ao redor do CEP
+    const block = buildBlock(lines, i, 3);
+    const key = block.toLowerCase();
+    if (block && !seen.has(key)) {
+      seen.add(key);
+      results.push({ text: block, score: 100 });
+      for (let k = Math.max(0, i - 3); k <= Math.min(lines.length - 1, i + 3); k++) usedIndexes.add(k);
     }
   }
 
-  const deduped = [];
-  const seen = new Set();
-  for (const candidate of candidates) {
-    const key = candidate.toLowerCase();
-    if (seen.has(key)) continue;
-    seen.add(key);
-    deduped.push(candidate);
+  // Passo 2 — Ancoras por rotulo explicito ("Endereco:", "Local:", etc.)
+  for (let i = 0; i < lines.length; i += 1) {
+    if (usedIndexes.has(i)) continue;
+    if (!RGX.label.test(lines[i])) continue;
+
+    // Remove o proprio rotulo e usa o restante + proximas linhas
+    const stripped = lines[i].replace(RGX.label, "").trim();
+    const parts = stripped ? [stripped] : [];
+    for (let k = i + 1; k <= Math.min(lines.length - 1, i + 3); k++) {
+      const s = scoreLine(lines[k]);
+      if (s > 5) { parts.push(lines[k]); usedIndexes.add(k); }
+    }
+    const block = parts.join(", ").replace(/,\s*,/g, ",").trim();
+    const key = block.toLowerCase();
+    if (block && !seen.has(key)) {
+      seen.add(key);
+      results.push({ text: block, score: 90 });
+      usedIndexes.add(i);
+    }
   }
 
-  return deduped;
+  // Passo 3 — Score ponderado linha a linha para o restante
+  for (let i = 0; i < lines.length; i += 1) {
+    if (usedIndexes.has(i)) continue;
+
+    const score = scoreLine(lines[i]);
+    if (score < THRESHOLD) continue;
+
+    // Agrega linhas vizinhas com score positivo
+    const parts = [lines[i]];
+    for (let k = i + 1; k <= Math.min(lines.length - 1, i + 2); k++) {
+      const s = scoreLine(lines[k]);
+      if (s > 5 && !usedIndexes.has(k)) {
+        parts.push(lines[k]);
+        usedIndexes.add(k);
+      }
+    }
+    usedIndexes.add(i);
+
+    const block = parts.join(", ").replace(/,\s*,/g, ",").trim();
+    const key = block.toLowerCase();
+    if (!seen.has(key)) {
+      seen.add(key);
+      results.push({ text: block, score });
+    }
+  }
+
+  // Ordena por score (maior primeiro) e retorna
+  return results.sort((a, b) => b.score - a.score).map((r) => r.text);
 }
 
 function extractPageLines(items) {
