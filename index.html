@@ -1,0 +1,57 @@
+<!doctype html>
+<html lang="pt-BR">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="theme-color" content="#0f766e" />
+    <title>RotaPDF</title>
+    <link rel="manifest" href="manifest.webmanifest" />
+    <link rel="icon" href="icons/icon.svg" type="image/svg+xml" />
+    <link rel="stylesheet" href="styles.css" />
+  </head>
+  <body>
+    <main class="app-shell">
+      <header class="hero">
+        <p class="eyebrow">PWA para rotas</p>
+        <h1>RotaPDF</h1>
+        <p class="subtitle">
+          Abra um PDF, extraia enderecos automaticamente e navegue direto no Waze.
+        </p>
+      </header>
+
+      <section class="panel uploader">
+        <h2>1) Escolha o PDF</h2>
+        <p>
+          Voce pode selecionar manualmente ou abrir com este app no celular (quando instalado).
+        </p>
+        <input id="pdfInput" type="file" accept="application/pdf" />
+        <div class="row">
+          <label class="checkline">
+            <input id="autoOpen" type="checkbox" checked />
+            Redirecionar automaticamente para o primeiro endereco encontrado
+          </label>
+        </div>
+        <button id="analyzeBtn" class="btn" type="button">Analisar PDF</button>
+      </section>
+
+      <section class="panel status" id="statusPanel" aria-live="polite">
+        Pronto para analisar.
+      </section>
+
+      <section class="panel" id="resultsPanel">
+        <h2>2) Enderecos encontrados</h2>
+        <ul id="addressList" class="address-list"></ul>
+      </section>
+
+      <section class="panel muted">
+        <h2>Dica para celular</h2>
+        <p>
+          Instale este PWA e use a opcao <strong>Abrir com</strong> no PDF para enviar direto para o app.
+        </p>
+      </section>
+    </main>
+
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/4.4.168/pdf.min.mjs" type="module"></script>
+    <script type="module" src="app.js"></script>
+  </body>
+</html>

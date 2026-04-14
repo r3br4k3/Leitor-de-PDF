@@ -1,0 +1,160 @@
+:root {
+  --bg-1: #eefbf8;
+  --bg-2: #d8f3ec;
+  --text: #0f172a;
+  --muted: #334155;
+  --panel: rgba(255, 255, 255, 0.85);
+  --stroke: rgba(15, 118, 110, 0.22);
+  --brand: #0f766e;
+  --brand-strong: #115e59;
+  --alert: #b91c1c;
+  --ok: #166534;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  min-height: 100vh;
+  font-family: "Segoe UI", Tahoma, Geneva, Verdana, sans-serif;
+  color: var(--text);
+  background:
+    radial-gradient(1200px 600px at 15% -10%, #99f6e4 0%, transparent 70%),
+    radial-gradient(1000px 600px at 90% 0%, #5eead4 0%, transparent 65%),
+    linear-gradient(160deg, var(--bg-1), var(--bg-2));
+}
+
+.app-shell {
+  width: min(920px, 92vw);
+  margin: 32px auto;
+  display: grid;
+  gap: 16px;
+}
+
+.hero h1 {
+  margin: 0;
+  font-size: clamp(2rem, 3vw + 1rem, 3.2rem);
+  letter-spacing: 0.02em;
+}
+
+.eyebrow {
+  margin: 0 0 6px;
+  font-weight: 700;
+  color: var(--brand-strong);
+  text-transform: uppercase;
+  font-size: 0.78rem;
+  letter-spacing: 0.08em;
+}
+
+.subtitle {
+  margin: 10px 0 0;
+  max-width: 60ch;
+  color: var(--muted);
+}
+
+.panel {
+  background: var(--panel);
+  border: 1px solid var(--stroke);
+  border-radius: 16px;
+  padding: 16px;
+  backdrop-filter: blur(6px);
+}
+
+.panel h2 {
+  margin-top: 0;
+  margin-bottom: 10px;
+  font-size: 1.1rem;
+}
+
+.muted {
+  color: var(--muted);
+}
+
+.row {
+  margin: 12px 0;
+}
+
+.checkline {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.btn {
+  border: none;
+  border-radius: 12px;
+  background: linear-gradient(120deg, var(--brand), var(--brand-strong));
+  color: #fff;
+  padding: 10px 14px;
+  font-size: 1rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: transform 150ms ease, opacity 150ms ease;
+}
+
+.btn:hover {
+  transform: translateY(-1px);
+  opacity: 0.94;
+}
+
+.status {
+  border-left: 4px solid var(--brand);
+}
+
+.status.error {
+  border-left-color: var(--alert);
+  color: var(--alert);
+}
+
+.status.ok {
+  border-left-color: var(--ok);
+  color: var(--ok);
+}
+
+.address-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 10px;
+}
+
+.address-item {
+  border: 1px solid var(--stroke);
+  border-radius: 12px;
+  padding: 12px;
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  align-items: center;
+  background: #ffffffd9;
+}
+
+.address-text {
+  flex: 1;
+  word-break: break-word;
+}
+
+.waze-btn {
+  border: 1px solid var(--brand);
+  border-radius: 10px;
+  background: #fff;
+  color: var(--brand-strong);
+  padding: 8px 10px;
+  cursor: pointer;
+  font-weight: 600;
+}
+
+@media (max-width: 700px) {
+  .app-shell {
+    margin: 18px auto;
+    width: min(96vw, 700px);
+  }
+
+  .address-item {
+    flex-direction: column;
+    align-items: stretch;
+  }
+}
