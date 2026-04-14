@@ -5,6 +5,8 @@ const analyzeBtn = document.getElementById("analyzeBtn");
 const autoOpen = document.getElementById("autoOpen");
 const pdfViewer = document.getElementById("pdfViewer");
 const viewerHint = document.getElementById("viewerHint");
+const pdfTextOutput = document.getElementById("pdfTextOutput");
+const copyTextBtn = document.getElementById("copyTextBtn");
 
 const ROUTE_URL = "https://waze.com/ul";
 let selectedFile = null;
@@ -36,6 +38,10 @@ function showPdf(file) {
   currentViewerUrl = URL.createObjectURL(file);
   pdfViewer.src = currentViewerUrl;
   viewerHint.textContent = `Arquivo carregado: ${file.name}`;
+}
+
+function renderExtractedText(lines) {
+  pdfTextOutput.value = lines.join("\n");
 }
 
 function normalizeAddress(line) {
@@ -204,6 +210,7 @@ async function analyzeFile(file) {
 
   try {
     const lines = await extractTextFromPdf(file);
+    renderExtractedText(lines);
     const addresses = findAddresses(lines);
 
     renderAddresses(addresses);
@@ -217,9 +224,28 @@ async function analyzeFile(file) {
       setStatus("PDF analisado, mas sem endereco claro para rota.", "error");
     }
   } catch (error) {
+    renderExtractedText([]);
     setStatus("Falha ao analisar PDF. Verifique se o arquivo nao esta protegido.", "error");
   }
 }
+
+copyTextBtn.addEventListener("click", async () => {
+  const text = pdfTextOutput.value.trim();
+  if (!text) {
+    setStatus("Nao ha texto extraido para copiar ainda.", "error");
+    return;
+  }
+
+  try {
+    await navigator.clipboard.writeText(text);
+    setStatus("Texto do PDF copiado.", "ok");
+  } catch {
+    pdfTextOutput.focus();
+    pdfTextOutput.select();
+    const copied = document.execCommand("copy");
+    setStatus(copied ? "Texto do PDF copiado." : "Nao foi possivel copiar automaticamente.", copied ? "ok" : "error");
+  }
+});
 
 pdfInput.addEventListener("change", (event) => {
   selectedFile = event.target.files?.[0] || null;
