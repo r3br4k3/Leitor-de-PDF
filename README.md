@@ -22,3 +22,8 @@ PWA web para abrir PDF, identificar enderecos e redirecionar para o Waze.
 - A deteccao de endereco usa heuristica. PDFs muito desestruturados podem exigir ajuste.
 - Suporte de abrir PDF diretamente no app depende do navegador/dispositivo.
 - Em Android, use Chrome recente para maior compatibilidade.
+
+## Deploy na Hostinger via Git
+
+- Guia completo: veja `HOSTINGER_GIT_DEPLOY.md`.
+- Arquivo `.htaccess` incluido para compatibilidade PWA em hospedagem Apache.

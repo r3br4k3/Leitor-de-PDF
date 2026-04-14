@@ -1,0 +1,30 @@
+# Tipos de arquivo importantes para PWA
+AddType application/manifest+json .webmanifest
+AddType application/javascript .js .mjs
+
+<IfModule mod_headers.c>
+  # Permite controle de escopo do service worker
+  Header set Service-Worker-Allowed "/"
+
+  # Evita cache agressivo em arquivos que mudam com frequencia
+  <FilesMatch "^(index\.html|manifest\.webmanifest|sw\.js)$">
+    Header set Cache-Control "no-cache, no-store, must-revalidate"
+    Header set Pragma "no-cache"
+    Header set Expires "0"
+  </FilesMatch>
+
+  # Cache para assets estaticos
+  <FilesMatch "\.(css|js|mjs|svg|png|jpg|jpeg|webp|ico)$">
+    Header set Cache-Control "public, max-age=31536000, immutable"
+  </FilesMatch>
+</IfModule>
+
+# Fallback opcional para app de pagina unica
+DirectoryIndex index.html
+
+<IfModule mod_rewrite.c>
+  RewriteEngine On
+  RewriteCond %{REQUEST_FILENAME} !-f
+  RewriteCond %{REQUEST_FILENAME} !-d
+  RewriteRule ^ index.html [L]
+</IfModule>
