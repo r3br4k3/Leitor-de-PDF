@@ -147,6 +147,14 @@ body {
   font-weight: 600;
 }
 
+.pdf-viewer {
+  width: 100%;
+  min-height: 68vh;
+  border: 1px solid var(--stroke);
+  border-radius: 12px;
+  background: #fff;
+}
+
 @media (max-width: 700px) {
   .app-shell {
     margin: 18px auto;
@@ -156,5 +164,9 @@ body {
   .address-item {
     flex-direction: column;
     align-items: stretch;
+  }
+
+  .pdf-viewer {
+    min-height: 60vh;
   }
 }

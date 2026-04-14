@@ -3,9 +3,12 @@ const addressList = document.getElementById("addressList");
 const pdfInput = document.getElementById("pdfInput");
 const analyzeBtn = document.getElementById("analyzeBtn");
 const autoOpen = document.getElementById("autoOpen");
+const pdfViewer = document.getElementById("pdfViewer");
+const viewerHint = document.getElementById("viewerHint");
 
 const ROUTE_URL = "https://waze.com/ul";
 let selectedFile = null;
+let currentViewerUrl = "";
 
 if ("serviceWorker" in navigator) {
   navigator.serviceWorker.register("/sw.js").catch(() => {
@@ -21,6 +24,18 @@ function setStatus(message, mode = "") {
 function openInWaze(address) {
   const target = `${ROUTE_URL}?q=${encodeURIComponent(address)}&navigate=yes`;
   window.location.href = target;
+}
+
+function showPdf(file) {
+  if (!file || file.type !== "application/pdf") return;
+
+  if (currentViewerUrl) {
+    URL.revokeObjectURL(currentViewerUrl);
+  }
+
+  currentViewerUrl = URL.createObjectURL(file);
+  pdfViewer.src = currentViewerUrl;
+  viewerHint.textContent = `Arquivo carregado: ${file.name}`;
 }
 
 function normalizeAddress(line) {
@@ -208,6 +223,9 @@ async function analyzeFile(file) {
 
 pdfInput.addEventListener("change", (event) => {
   selectedFile = event.target.files?.[0] || null;
+  if (selectedFile) {
+    showPdf(selectedFile);
+  }
 });
 
 analyzeBtn.addEventListener("click", async () => {
@@ -227,9 +245,16 @@ async function handleIncomingFile(file) {
   const transfer = new DataTransfer();
   transfer.items.add(file);
   pdfInput.files = transfer.files;
+  showPdf(file);
 
   await analyzeFile(file);
 }
+
+window.addEventListener("beforeunload", () => {
+  if (currentViewerUrl) {
+    URL.revokeObjectURL(currentViewerUrl);
+  }
+});
 
 if ("launchQueue" in window) {
   window.launchQueue.setConsumer(async (launchParams) => {

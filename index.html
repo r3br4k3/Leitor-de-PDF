@@ -27,11 +27,17 @@
         <input id="pdfInput" type="file" accept="application/pdf" />
         <div class="row">
           <label class="checkline">
-            <input id="autoOpen" type="checkbox" checked />
+            <input id="autoOpen" type="checkbox" />
             Redirecionar automaticamente para o primeiro endereco encontrado
           </label>
         </div>
         <button id="analyzeBtn" class="btn" type="button">Analisar PDF</button>
+      </section>
+
+      <section class="panel" id="viewerPanel">
+        <h2>2) Visualizar PDF</h2>
+        <p id="viewerHint" class="muted">Nenhum PDF carregado.</p>
+        <iframe id="pdfViewer" class="pdf-viewer" title="Visualizacao do PDF"></iframe>
       </section>
 
       <section class="panel status" id="statusPanel" aria-live="polite">
@@ -39,7 +45,7 @@
       </section>
 
       <section class="panel" id="resultsPanel">
-        <h2>2) Enderecos encontrados</h2>
+        <h2>3) Enderecos encontrados</h2>
         <ul id="addressList" class="address-list"></ul>
       </section>
 
