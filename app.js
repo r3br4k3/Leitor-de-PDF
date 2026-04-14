@@ -61,25 +61,32 @@ function shouldIgnoreLine(line) {
   return IGNORED_PARTIAL_REGEX.some((regex) => regex.test(normalized));
 }
 
-function findAddresses(text) {
-  const lines = text
-    .split(/\r?\n/)
-    .map((line) => normalizeAddress(line))
-    .filter((line) => line && !shouldIgnoreLine(line));
+function findAddresses(linesInput) {
+  const lines = linesInput.map((line) => normalizeAddress(line)).filter((line) => line && !shouldIgnoreLine(line));
 
-  const keywordRegex =
-    /\b(rua|av\.?|avenida|travessa|estrada|rodovia|alameda|praca|largo|viela|logradouro|condominio)\b/i;
+  const streetRegex =
+    /\b(rua|r\.|av\.?|avenida|travessa|estrada|rodovia|alameda|praca|largo|viela|logradouro|condominio)\b/i;
   const cepRegex = /\b\d{5}-?\d{3}\b/;
   const numberRegex = /\b\d{1,5}\b/;
+  const numeroMarcadorRegex = /\bn\s*[oº°]\s*[:\.]?\s*\d{1,5}\b/i;
+  const bairroRegex = /\bbairro\s*[:\-]?\s*[a-z0-9\s\-]+$/i;
 
   const candidates = [];
-  for (const line of lines) {
-    const hasStreet = keywordRegex.test(line);
+  for (let index = 0; index < lines.length; index += 1) {
+    const line = lines[index];
+    const nextLine = lines[index + 1] || "";
+
+    const hasStreet = streetRegex.test(line);
     const hasCep = cepRegex.test(line);
     const hasNumber = numberRegex.test(line);
+    const hasNumeroMarcador = numeroMarcadorRegex.test(line);
+    const nextHasBairro = bairroRegex.test(nextLine);
+    const thisHasBairro = bairroRegex.test(line);
 
-    if ((hasStreet && hasNumber) || (hasStreet && hasCep)) {
-      candidates.push(line);
+    if ((hasStreet && (hasNumber || hasNumeroMarcador || hasCep)) || (hasStreet && nextHasBairro) || (hasStreet && thisHasBairro)) {
+      const merged = nextHasBairro ? `${line}, ${nextLine}` : line;
+      candidates.push(merged);
+      if (nextHasBairro) index += 1;
     }
   }
 
@@ -93,6 +100,37 @@ function findAddresses(text) {
   }
 
   return deduped;
+}
+
+function extractPageLines(items) {
+  // Agrupa fragmentos por coordenada Y para recompor linhas reais do PDF.
+  const rowsByY = new Map();
+
+  for (const item of items) {
+    if (!item?.str || !item.str.trim()) continue;
+
+    const x = typeof item.transform?.[4] === "number" ? item.transform[4] : 0;
+    const yRaw = typeof item.transform?.[5] === "number" ? item.transform[5] : 0;
+    const yKey = String(Math.round(yRaw));
+
+    if (!rowsByY.has(yKey)) {
+      rowsByY.set(yKey, []);
+    }
+
+    rowsByY.get(yKey).push({ x, text: item.str });
+  }
+
+  const sortedY = [...rowsByY.keys()].map(Number).sort((a, b) => b - a);
+  const lines = [];
+
+  for (const y of sortedY) {
+    const tokens = rowsByY.get(String(y)).sort((a, b) => a.x - b.x);
+    const line = tokens.map((token) => token.text).join(" ");
+    const normalized = normalizeAddress(line);
+    if (normalized) lines.push(normalized);
+  }
+
+  return lines;
 }
 
 function renderAddresses(addresses) {
@@ -136,23 +174,22 @@ async function extractTextFromPdf(file) {
   const data = await file.arrayBuffer();
   const doc = await pdfjsLib.getDocument({ data }).promise;
 
-  const parts = [];
+  const lines = [];
   for (let pageNumber = 1; pageNumber <= doc.numPages; pageNumber += 1) {
     const page = await doc.getPage(pageNumber);
     const content = await page.getTextContent();
-    const pageText = content.items.map((item) => item.str).join(" ");
-    parts.push(pageText);
+    lines.push(...extractPageLines(content.items));
   }
 
-  return parts.join("\n");
+  return lines;
 }
 
 async function analyzeFile(file) {
   setStatus("Lendo PDF...", "");
 
   try {
-    const text = await extractTextFromPdf(file);
-    const addresses = findAddresses(text);
+    const lines = await extractTextFromPdf(file);
+    const addresses = findAddresses(lines);
 
     renderAddresses(addresses);
 
