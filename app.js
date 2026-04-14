@@ -8,7 +8,7 @@ const ROUTE_URL = "https://waze.com/ul";
 let selectedFile = null;
 
 if ("serviceWorker" in navigator) {
-  navigator.serviceWorker.register("./sw.js").catch(() => {
+  navigator.serviceWorker.register("/sw.js").catch(() => {
     // Registro do SW e opcional; o app continua sem cache offline.
   });
 }
