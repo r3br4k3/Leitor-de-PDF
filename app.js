@@ -5,9 +5,11 @@ const analyzeBtn = document.getElementById("analyzeBtn");
 const autoOpen = document.getElementById("autoOpen");
 const pdfCanvasContainer = document.getElementById("pdfCanvasContainer");
 const viewerHint = document.getElementById("viewerHint");
+const openNativeBtn = document.getElementById("openNativeBtn");
 
 const ROUTE_URL = "https://waze.com/ul";
 let selectedFile = null;
+let nativePdfUrl = "";
 
 if ("serviceWorker" in navigator) {
   navigator.serviceWorker.register("/sw.js").catch(() => {
@@ -29,74 +31,13 @@ function clearPdfPreview() {
   pdfCanvasContainer.innerHTML = "";
 }
 
-// Multiplica duas matrizes de transformacao 2D (arrays de 6 elementos)
-function multiplyMatrix(m1, m2) {
-  return [
-    m1[0] * m2[0] + m1[2] * m2[1],
-    m1[1] * m2[0] + m1[3] * m2[1],
-    m1[0] * m2[2] + m1[2] * m2[3],
-    m1[1] * m2[2] + m1[3] * m2[3],
-    m1[0] * m2[4] + m1[2] * m2[5] + m1[4],
-    m1[1] * m2[4] + m1[3] * m2[5] + m1[5],
-  ];
-}
-
-// Renderiza spans transparentes selecionaveis sobre o canvas do PDF.
-// Funciona em Chrome, Firefox, Safari, iOS e Android.
-const measureCanvas = document.createElement("canvas");
-const measureCtx = measureCanvas.getContext("2d");
-
-function buildSelectableTextLayer(textContent, container, viewport) {
-  const vt = viewport.transform;
-
-  for (const item of textContent.items) {
-    if (!item.str || !item.str.trim()) continue;
-
-    // Combina transformacao do item com a do viewport (espaco CSS)
-    const tx = multiplyMatrix(vt, item.transform);
-
-    // Altura da fonte = magnitude do vetor Y transformado, com limite para mobile.
-    const rawFontHeight = Math.max(Math.hypot(tx[2], tx[3]), 4);
-    const fontHeight = Math.min(Math.max(rawFontHeight, 8), 28);
-
-    // Ascendente aproximado (80% da altura cobre a maioria das fontes)
-    const ascent = fontHeight * 0.80;
-    const left = tx[4];
-    const top  = tx[5] - ascent;
-
-    // Calcula scaleX para ajustar a largura real do texto ao espaco do PDF
-    let scaleX = 1;
-    if (item.width > 0 && item.str.length > 0) {
-      const expectedPx = item.width * Math.hypot(tx[0], tx[1]);
-      measureCtx.font = `${fontHeight}px sans-serif`;
-      const measuredPx = measureCtx.measureText(item.str).width;
-      if (measuredPx > 0) scaleX = expectedPx / measuredPx;
-    }
-
-    const span = document.createElement("span");
-    span.textContent = item.str;
-
-    // Estilos inline para maxima compatibilidade entre navegadores
-    span.style.cssText = [
-      "position:absolute",
-      `left:${left.toFixed(2)}px`,
-      `top:${top.toFixed(2)}px`,
-      `font-size:${fontHeight.toFixed(2)}px`,
-      "line-height:1",
-      `transform:scaleX(${scaleX.toFixed(4)})`,
-      "transform-origin:0 0",
-      "color:transparent",
-      "white-space:pre",
-      "cursor:text",
-      "user-select:text",
-      "-webkit-user-select:text",
-      "-moz-user-select:text",
-      "pointer-events:auto",
-      "touch-action:auto",
-    ].join(";");
-
-    container.appendChild(span);
+function updateNativePdfUrl(file) {
+  if (nativePdfUrl) {
+    URL.revokeObjectURL(nativePdfUrl);
   }
+
+  nativePdfUrl = URL.createObjectURL(file);
+  openNativeBtn.disabled = false;
 }
 
 function normalizeAddress(line) {
@@ -326,6 +267,7 @@ async function renderAndExtract(file) {
     "https://cdnjs.cloudflare.com/ajax/libs/pdf.js/4.4.168/pdf.worker.min.mjs";
 
   clearPdfPreview();
+  updateNativePdfUrl(file);
   viewerHint.textContent = `Carregando: ${file.name}`;
 
   const data = await file.arrayBuffer();
@@ -358,13 +300,7 @@ async function renderAndExtract(file) {
     canvas.style.width = `${Math.floor(viewport.width)}px`;
     canvas.style.height = `${Math.floor(viewport.height)}px`;
 
-    // Camada de texto invisivel e selecionavel
-    const textLayer = document.createElement("div");
-    textLayer.className = "pdf-text-layer";
-    textLayer.style.width = `${Math.floor(viewport.width)}px`;
-    textLayer.style.height = `${Math.floor(viewport.height)}px`;
-
-    wrapper.append(canvas, textLayer);
+    wrapper.append(canvas);
     pdfCanvasContainer.appendChild(wrapper);
 
     const context = canvas.getContext("2d", { alpha: false });
@@ -372,14 +308,25 @@ async function renderAndExtract(file) {
 
     await page.render({ canvasContext: context, viewport: renderViewport }).promise;
 
-    buildSelectableTextLayer(textContent, textLayer, viewport);
-
     allLines.push(...extractPageLines(textContent.items));
   }
 
   viewerHint.textContent = `${file.name} — ${doc.numPages} pagina(s)`;
   return allLines;
 }
+
+openNativeBtn.addEventListener("click", () => {
+  if (!nativePdfUrl) {
+    setStatus("Carregue um PDF antes de abrir no visualizador nativo.", "error");
+    return;
+  }
+
+  const win = window.open(nativePdfUrl, "_blank", "noopener,noreferrer");
+  if (!win) {
+    // Fallback para navegadores que bloqueiam popup.
+    window.location.href = nativePdfUrl;
+  }
+});
 
 async function analyzeFile(file) {
   setStatus("Lendo PDF...", "");
@@ -433,6 +380,12 @@ async function handleIncomingFile(file) {
 
   await analyzeFile(file);
 }
+
+window.addEventListener("beforeunload", () => {
+  if (nativePdfUrl) {
+    URL.revokeObjectURL(nativePdfUrl);
+  }
+});
 
 if ("launchQueue" in window) {
   window.launchQueue.setConsumer(async (launchParams) => {
