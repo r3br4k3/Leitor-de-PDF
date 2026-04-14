@@ -168,29 +168,7 @@ function renderAddresses(addresses) {
   }
 }
 
-async function extractTextFromPdf(file) {
-  const pdfjsLib = globalThis.pdfjsLib;
-  if (!pdfjsLib) {
-    throw new Error("Biblioteca PDF.js nao carregou.");
-  }
-
-  pdfjsLib.GlobalWorkerOptions.workerSrc =
-    "https://cdnjs.cloudflare.com/ajax/libs/pdf.js/4.4.168/pdf.worker.min.mjs";
-
-  const data = await file.arrayBuffer();
-  const doc = await pdfjsLib.getDocument({ data }).promise;
-
-  const lines = [];
-  for (let pageNumber = 1; pageNumber <= doc.numPages; pageNumber += 1) {
-    const page = await doc.getPage(pageNumber);
-    const content = await page.getTextContent();
-    lines.push(...extractPageLines(content.items));
-  }
-
-  return lines;
-}
-
-async function renderPdfPreview(file) {
+async function renderAndExtract(file) {
   const pdfjsLib = globalThis.pdfjsLib;
   if (!pdfjsLib) {
     throw new Error("Biblioteca PDF.js nao carregou.");
@@ -200,37 +178,68 @@ async function renderPdfPreview(file) {
     "https://cdnjs.cloudflare.com/ajax/libs/pdf.js/4.4.168/pdf.worker.min.mjs";
 
   clearPdfPreview();
-  viewerHint.textContent = `Renderizando: ${file.name}`;
+  viewerHint.textContent = `Carregando: ${file.name}`;
 
   const data = await file.arrayBuffer();
   const doc = await pdfjsLib.getDocument({ data }).promise;
-  const containerWidth = Math.max(pdfCanvasContainer.clientWidth - 20, 280);
+  const containerWidth = Math.max(pdfCanvasContainer.clientWidth - 22, 280);
+  const dpr = window.devicePixelRatio || 1;
+  const allLines = [];
 
   for (let pageNumber = 1; pageNumber <= doc.numPages; pageNumber += 1) {
     const page = await doc.getPage(pageNumber);
     const baseViewport = page.getViewport({ scale: 1 });
-    const scale = containerWidth / baseViewport.width;
-    const viewport = page.getViewport({ scale: Math.max(scale, 0.8) });
+    const scale = Math.max(containerWidth / baseViewport.width, 0.8);
 
+    // Viewport em CSS pixels (para texto e dimensoes do wrapper)
+    const viewport = page.getViewport({ scale });
+    // Viewport em pixels fisicos (para canvas nitido em telas Retina/HDPI)
+    const renderViewport = page.getViewport({ scale: scale * dpr });
+
+    // Wrapper posicionado
+    const wrapper = document.createElement("div");
+    wrapper.className = "pdf-page-wrapper";
+    wrapper.style.width = `${Math.floor(viewport.width)}px`;
+    wrapper.style.height = `${Math.floor(viewport.height)}px`;
+
+    // Canvas renderizado em alta resolucao
     const canvas = document.createElement("canvas");
     canvas.className = "pdf-page-canvas";
-    canvas.width = Math.floor(viewport.width);
-    canvas.height = Math.floor(viewport.height);
+    canvas.width = Math.floor(renderViewport.width);
+    canvas.height = Math.floor(renderViewport.height);
+    canvas.style.width = `${Math.floor(viewport.width)}px`;
+    canvas.style.height = `${Math.floor(viewport.height)}px`;
+
+    // Camada de texto invisivel e selecionavel
+    const textLayer = document.createElement("div");
+    textLayer.className = "pdf-text-layer";
+    textLayer.style.width = `${Math.floor(viewport.width)}px`;
+    textLayer.style.height = `${Math.floor(viewport.height)}px`;
+
+    wrapper.append(canvas, textLayer);
+    pdfCanvasContainer.appendChild(wrapper);
 
     const context = canvas.getContext("2d", { alpha: false });
-    await page.render({ canvasContext: context, viewport }).promise;
-    pdfCanvasContainer.appendChild(canvas);
+    const textContent = await page.getTextContent();
+
+    await page.render({ canvasContext: context, viewport: renderViewport }).promise;
+
+    if (typeof pdfjsLib.renderTextLayer === "function") {
+      pdfjsLib.renderTextLayer({ textContentSource: textContent, container: textLayer, viewport });
+    }
+
+    allLines.push(...extractPageLines(textContent.items));
   }
 
-  viewerHint.textContent = `Arquivo carregado: ${file.name} (${doc.numPages} pagina(s))`;
+  viewerHint.textContent = `${file.name} — ${doc.numPages} pagina(s)`;
+  return allLines;
 }
 
 async function analyzeFile(file) {
   setStatus("Lendo PDF...", "");
 
   try {
-    await renderPdfPreview(file);
-    const lines = await extractTextFromPdf(file);
+    const lines = await renderAndExtract(file);
     const addresses = findAddresses(lines);
 
     renderAddresses(addresses);
