@@ -3,14 +3,11 @@ const addressList = document.getElementById("addressList");
 const pdfInput = document.getElementById("pdfInput");
 const analyzeBtn = document.getElementById("analyzeBtn");
 const autoOpen = document.getElementById("autoOpen");
-const pdfViewer = document.getElementById("pdfViewer");
+const pdfCanvasContainer = document.getElementById("pdfCanvasContainer");
 const viewerHint = document.getElementById("viewerHint");
-const pdfTextOutput = document.getElementById("pdfTextOutput");
-const copyTextBtn = document.getElementById("copyTextBtn");
 
 const ROUTE_URL = "https://waze.com/ul";
 let selectedFile = null;
-let currentViewerUrl = "";
 
 if ("serviceWorker" in navigator) {
   navigator.serviceWorker.register("/sw.js").catch(() => {
@@ -28,20 +25,8 @@ function openInWaze(address) {
   window.location.href = target;
 }
 
-function showPdf(file) {
-  if (!file || file.type !== "application/pdf") return;
-
-  if (currentViewerUrl) {
-    URL.revokeObjectURL(currentViewerUrl);
-  }
-
-  currentViewerUrl = URL.createObjectURL(file);
-  pdfViewer.src = currentViewerUrl;
-  viewerHint.textContent = `Arquivo carregado: ${file.name}`;
-}
-
-function renderExtractedText(lines) {
-  pdfTextOutput.value = lines.join("\n");
+function clearPdfPreview() {
+  pdfCanvasContainer.innerHTML = "";
 }
 
 function normalizeAddress(line) {
@@ -205,12 +190,47 @@ async function extractTextFromPdf(file) {
   return lines;
 }
 
+async function renderPdfPreview(file) {
+  const pdfjsLib = globalThis.pdfjsLib;
+  if (!pdfjsLib) {
+    throw new Error("Biblioteca PDF.js nao carregou.");
+  }
+
+  pdfjsLib.GlobalWorkerOptions.workerSrc =
+    "https://cdnjs.cloudflare.com/ajax/libs/pdf.js/4.4.168/pdf.worker.min.mjs";
+
+  clearPdfPreview();
+  viewerHint.textContent = `Renderizando: ${file.name}`;
+
+  const data = await file.arrayBuffer();
+  const doc = await pdfjsLib.getDocument({ data }).promise;
+  const containerWidth = Math.max(pdfCanvasContainer.clientWidth - 20, 280);
+
+  for (let pageNumber = 1; pageNumber <= doc.numPages; pageNumber += 1) {
+    const page = await doc.getPage(pageNumber);
+    const baseViewport = page.getViewport({ scale: 1 });
+    const scale = containerWidth / baseViewport.width;
+    const viewport = page.getViewport({ scale: Math.max(scale, 0.8) });
+
+    const canvas = document.createElement("canvas");
+    canvas.className = "pdf-page-canvas";
+    canvas.width = Math.floor(viewport.width);
+    canvas.height = Math.floor(viewport.height);
+
+    const context = canvas.getContext("2d", { alpha: false });
+    await page.render({ canvasContext: context, viewport }).promise;
+    pdfCanvasContainer.appendChild(canvas);
+  }
+
+  viewerHint.textContent = `Arquivo carregado: ${file.name} (${doc.numPages} pagina(s))`;
+}
+
 async function analyzeFile(file) {
   setStatus("Lendo PDF...", "");
 
   try {
+    await renderPdfPreview(file);
     const lines = await extractTextFromPdf(file);
-    renderExtractedText(lines);
     const addresses = findAddresses(lines);
 
     renderAddresses(addresses);
@@ -224,33 +244,16 @@ async function analyzeFile(file) {
       setStatus("PDF analisado, mas sem endereco claro para rota.", "error");
     }
   } catch (error) {
-    renderExtractedText([]);
+    clearPdfPreview();
+    viewerHint.textContent = "Nao foi possivel exibir o PDF.";
     setStatus("Falha ao analisar PDF. Verifique se o arquivo nao esta protegido.", "error");
   }
 }
 
-copyTextBtn.addEventListener("click", async () => {
-  const text = pdfTextOutput.value.trim();
-  if (!text) {
-    setStatus("Nao ha texto extraido para copiar ainda.", "error");
-    return;
-  }
-
-  try {
-    await navigator.clipboard.writeText(text);
-    setStatus("Texto do PDF copiado.", "ok");
-  } catch {
-    pdfTextOutput.focus();
-    pdfTextOutput.select();
-    const copied = document.execCommand("copy");
-    setStatus(copied ? "Texto do PDF copiado." : "Nao foi possivel copiar automaticamente.", copied ? "ok" : "error");
-  }
-});
-
 pdfInput.addEventListener("change", (event) => {
   selectedFile = event.target.files?.[0] || null;
   if (selectedFile) {
-    showPdf(selectedFile);
+    viewerHint.textContent = `Arquivo selecionado: ${selectedFile.name}`;
   }
 });
 
@@ -271,16 +274,10 @@ async function handleIncomingFile(file) {
   const transfer = new DataTransfer();
   transfer.items.add(file);
   pdfInput.files = transfer.files;
-  showPdf(file);
+  viewerHint.textContent = `Arquivo recebido: ${file.name}`;
 
   await analyzeFile(file);
 }
-
-window.addEventListener("beforeunload", () => {
-  if (currentViewerUrl) {
-    URL.revokeObjectURL(currentViewerUrl);
-  }
-});
 
 if ("launchQueue" in window) {
   window.launchQueue.setConsumer(async (launchParams) => {

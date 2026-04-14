@@ -147,34 +147,23 @@ body {
   font-weight: 600;
 }
 
-.pdf-viewer {
+.pdf-canvas-container {
   width: 100%;
-  min-height: 68vh;
+  min-height: 40vh;
   border: 1px solid var(--stroke);
   border-radius: 12px;
   background: #fff;
+  padding: 10px;
+  display: grid;
+  gap: 12px;
 }
 
-.text-toolbar {
-  display: flex;
-  justify-content: flex-end;
-  margin-bottom: 10px;
-}
-
-.text-output {
+.pdf-page-canvas {
   width: 100%;
-  min-height: 34vh;
-  border: 1px solid var(--stroke);
-  border-radius: 12px;
-  padding: 12px;
-  font: 500 0.96rem/1.45 "Segoe UI", Tahoma, Geneva, Verdana, sans-serif;
-  resize: vertical;
-  color: var(--text);
+  height: auto;
+  border-radius: 8px;
+  border: 1px solid #e2e8f0;
   background: #fff;
-}
-
-.text-output::selection {
-  background: #99f6e4;
 }
 
 @media (max-width: 700px) {
@@ -188,12 +177,7 @@ body {
     align-items: stretch;
   }
 
-  .pdf-viewer {
-    min-height: 60vh;
-  }
-
-  .text-output {
-    min-height: 42vh;
-    font-size: 1rem;
+  .pdf-canvas-container {
+    min-height: 48vh;
   }
 }

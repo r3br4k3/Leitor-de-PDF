@@ -37,20 +37,7 @@
       <section class="panel" id="viewerPanel">
         <h2>2) Visualizar PDF</h2>
         <p id="viewerHint" class="muted">Nenhum PDF carregado.</p>
-        <iframe id="pdfViewer" class="pdf-viewer" title="Visualizacao do PDF"></iframe>
-      </section>
-
-      <section class="panel" id="textPanel">
-        <h2>3) Texto do PDF (copiavel)</h2>
-        <div class="text-toolbar">
-          <button id="copyTextBtn" class="waze-btn" type="button">Copiar texto</button>
-        </div>
-        <textarea
-          id="pdfTextOutput"
-          class="text-output"
-          readonly
-          placeholder="O texto extraido do PDF vai aparecer aqui para copia."
-        ></textarea>
+        <div id="pdfCanvasContainer" class="pdf-canvas-container" aria-label="Visualizacao do PDF"></div>
       </section>
 
       <section class="panel status" id="statusPanel" aria-live="polite">
@@ -58,7 +45,7 @@
       </section>
 
       <section class="panel" id="resultsPanel">
-        <h2>4) Enderecos encontrados</h2>
+        <h2>3) Enderecos encontrados</h2>
         <ul id="addressList" class="address-list"></ul>
       </section>
 
