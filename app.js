@@ -1,6 +1,6 @@
-import { getDocument, GlobalWorkerOptions } from "pdfjs-dist";
-import { EventBus, PDFLinkService, PDFViewer } from "pdfjs-dist/web/pdf_viewer.mjs";
-import "pdfjs-dist/web/pdf_viewer.css";
+import { getDocument, GlobalWorkerOptions } from "pdfjs-dist/legacy/build/pdf.mjs";
+import { EventBus, PDFLinkService, PDFViewer } from "pdfjs-dist/legacy/web/pdf_viewer.mjs";
+import "pdfjs-dist/legacy/web/pdf_viewer.css";
 
 const statusPanel = document.getElementById("statusPanel");
 const addressList = document.getElementById("addressList");
@@ -15,7 +15,7 @@ const ROUTE_URL = "https://waze.com/ul";
 let selectedFile = null;
 let activePdfDocument = null;
 
-GlobalWorkerOptions.workerSrc = new URL("pdfjs-dist/build/pdf.worker.mjs", import.meta.url).toString();
+GlobalWorkerOptions.workerSrc = new URL("pdfjs-dist/legacy/build/pdf.worker.mjs", import.meta.url).toString();
 
 const eventBus = new EventBus();
 const linkService = new PDFLinkService({ eventBus });
@@ -28,6 +28,9 @@ const pdfViewer = new PDFViewer({
   removePageBorders: false,
 });
 linkService.setViewer(pdfViewer);
+eventBus.on("pagesinit", () => {
+  pdfViewer.currentScaleValue = "page-width";
+});
 
 if ("serviceWorker" in navigator) {
   navigator.serviceWorker.register("/sw.js").catch(() => {
@@ -46,7 +49,15 @@ function openInWaze(address) {
 }
 
 function clearPdfPreview() {
+  if (activePdfDocument) {
+    activePdfDocument.destroy().catch(() => {
+      // Ignora falhas ao liberar o documento anterior.
+    });
+    activePdfDocument = null;
+  }
+
   pdfViewer.setDocument(null);
+  linkService.setDocument(null);
   pdfViewerElement.innerHTML = "";
 }
 
@@ -267,10 +278,6 @@ function renderAddresses(addresses) {
   }
 }
 
-async function renderPageSvg(pdfjsLib, page, viewport) {
-  return null;
-}
-
 async function renderAndExtract(file) {
   clearPdfPreview();
   viewerHint.textContent = `Carregando: ${file.name}`;
@@ -278,9 +285,8 @@ async function renderAndExtract(file) {
   const data = await file.arrayBuffer();
   const doc = await getDocument({ data }).promise;
   activePdfDocument = doc;
-  linkService.setDocument(doc);
   pdfViewer.setDocument(doc);
-  pdfViewer.currentScaleValue = "page-width";
+  linkService.setDocument(doc);
 
   const allLines = [];
 
