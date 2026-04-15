@@ -39,12 +39,9 @@
         <h2>2) Visualizar PDF</h2>
         <p id="viewerHint" class="muted">Nenhum PDF carregado.</p>
         <div class="viewer-actions">
-          <button id="viewStandardBtn" class="waze-btn viewer-mode-btn" type="button">Visual padrao</button>
-          <button id="viewTextBtn" class="waze-btn viewer-mode-btn" type="button">Texto copiavel</button>
           <button id="openNativeBtn" class="waze-btn" type="button" disabled>Abrir no padrao</button>
         </div>
-        <iframe id="pdfNativeFrame" class="pdf-native-frame" title="Visualizacao padrao do PDF"></iframe>
-        <textarea id="pdfTextOutput" class="pdf-text-output" readonly spellcheck="false"></textarea>
+        <div id="pdfCanvasContainer" class="pdf-canvas-container"></div>
       </section>
 
       <section class="panel status" id="statusPanel" aria-live="polite">

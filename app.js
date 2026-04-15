@@ -6,11 +6,8 @@ const addressList = document.getElementById("addressList");
 const pdfInput = document.getElementById("pdfInput");
 const analyzeBtn = document.getElementById("analyzeBtn");
 const autoOpen = document.getElementById("autoOpen");
-const viewStandardBtn = document.getElementById("viewStandardBtn");
-const viewTextBtn = document.getElementById("viewTextBtn");
 const openNativeBtn = document.getElementById("openNativeBtn");
-const pdfNativeFrame = document.getElementById("pdfNativeFrame");
-const pdfTextOutput = document.getElementById("pdfTextOutput");
+const pdfCanvasContainer = document.getElementById("pdfCanvasContainer");
 const viewerHint = document.getElementById("viewerHint");
 const darkToggle = document.getElementById("darkToggle");
 
@@ -32,7 +29,6 @@ const ROUTE_URL = "https://waze.com/ul";
 let selectedFile = null;
 let activePdfDocument = null;
 let nativePdfUrl = "";
-let viewerMode = window.matchMedia("(max-width: 700px)").matches ? "text" : "standard";
 let isCheckingNativePdf = false;
 
 const PdfIntent = registerPlugin("PdfIntent");
@@ -55,21 +51,9 @@ function openInWaze(address) {
   window.location.href = target;
 }
 
-function setViewerMode(mode) {
-  viewerMode = mode;
-  const showText = mode === "text";
-
-  pdfTextOutput.classList.toggle("is-visible", showText);
-  pdfNativeFrame.classList.toggle("is-hidden", showText);
-  viewTextBtn.classList.toggle("active", showText);
-  viewStandardBtn.classList.toggle("active", !showText);
-}
-
 function clearPdfPreview() {
   if (activePdfDocument) {
-    activePdfDocument.destroy().catch(() => {
-      // Ignora falhas ao liberar o documento anterior.
-    });
+    activePdfDocument.destroy().catch(() => {});
     activePdfDocument = null;
   }
 
@@ -78,10 +62,8 @@ function clearPdfPreview() {
     nativePdfUrl = "";
   }
 
-  pdfNativeFrame.removeAttribute("src");
+  pdfCanvasContainer.innerHTML = "";
   openNativeBtn.disabled = true;
-  pdfTextOutput.value = "";
-  setViewerMode(viewerMode);
 }
 
 function normalizeAddress(line) {
@@ -278,10 +260,30 @@ function renderAddresses(addresses) {
   }
 }
 
-function renderPdfPreview(file) {
-  nativePdfUrl = URL.createObjectURL(file);
-  pdfNativeFrame.src = nativePdfUrl;
-  openNativeBtn.disabled = false;
+async function renderPdfCanvases(doc) {
+  pdfCanvasContainer.innerHTML = "";
+  const containerWidth = pdfCanvasContainer.clientWidth || Math.min(window.innerWidth * 0.88, 880);
+  const dpr = window.devicePixelRatio || 1;
+
+  for (let pageNumber = 1; pageNumber <= doc.numPages; pageNumber += 1) {
+    const page = await doc.getPage(pageNumber);
+    const baseViewport = page.getViewport({ scale: 1 });
+    const scale = containerWidth / baseViewport.width;
+    const viewport = page.getViewport({ scale });
+
+    const canvas = document.createElement("canvas");
+    canvas.className = "pdf-page-canvas";
+    canvas.width = Math.floor(viewport.width * dpr);
+    canvas.height = Math.floor(viewport.height * dpr);
+    canvas.style.width = Math.floor(viewport.width) + "px";
+    canvas.style.height = Math.floor(viewport.height) + "px";
+    pdfCanvasContainer.appendChild(canvas);
+
+    const ctx = canvas.getContext("2d");
+    ctx.scale(dpr, dpr);
+    await page.render({ canvasContext: ctx, viewport }).promise;
+  }
+
 }
 
 function base64ToFile(base64Data, fileName, mimeType) {
@@ -433,14 +435,6 @@ openNativeBtn.addEventListener("click", () => {
   }
 });
 
-viewStandardBtn.addEventListener("click", () => {
-  setViewerMode("standard");
-});
-
-viewTextBtn.addEventListener("click", () => {
-  setViewerMode("text");
-});
-
 async function handleIncomingFile(file) {
   if (!file || file.type !== "application/pdf") return;
 
@@ -462,8 +456,6 @@ if ("launchQueue" in window) {
     }
   });
 }
-
-setViewerMode(viewerMode);
 
 window.addEventListener("focus", () => {
   void loadPendingNativePdf();
