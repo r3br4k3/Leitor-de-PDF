@@ -5,13 +5,14 @@ const addressList = document.getElementById("addressList");
 const pdfInput = document.getElementById("pdfInput");
 const analyzeBtn = document.getElementById("analyzeBtn");
 const autoOpen = document.getElementById("autoOpen");
-const pdfCanvasContainer = document.getElementById("pdfCanvasContainer");
+const pdfNativeFrame = document.getElementById("pdfNativeFrame");
 const pdfTextOutput = document.getElementById("pdfTextOutput");
 const viewerHint = document.getElementById("viewerHint");
 
 const ROUTE_URL = "https://waze.com/ul";
 let selectedFile = null;
 let activePdfDocument = null;
+let nativePdfUrl = "";
 
 GlobalWorkerOptions.workerSrc = new URL("pdfjs-dist/legacy/build/pdf.worker.mjs", import.meta.url).toString();
 
@@ -39,7 +40,12 @@ function clearPdfPreview() {
     activePdfDocument = null;
   }
 
-  pdfCanvasContainer.innerHTML = "";
+  if (nativePdfUrl) {
+    URL.revokeObjectURL(nativePdfUrl);
+    nativePdfUrl = "";
+  }
+
+  pdfNativeFrame.removeAttribute("src");
   pdfTextOutput.value = "";
 }
 
@@ -237,38 +243,9 @@ function renderAddresses(addresses) {
   }
 }
 
-async function renderPdfPreview(doc) {
-  const containerWidth = Math.min(Math.max(pdfCanvasContainer.clientWidth - 20, 280), 900);
-  const dpr = Math.min(window.devicePixelRatio || 1, 1.25);
-
-  for (let pageNumber = 1; pageNumber <= doc.numPages; pageNumber += 1) {
-    const page = await doc.getPage(pageNumber);
-    const baseViewport = page.getViewport({ scale: 1 });
-    const scale = Math.max(containerWidth / baseViewport.width, 0.8);
-    const viewport = page.getViewport({ scale });
-    const renderViewport = page.getViewport({ scale: scale * dpr });
-
-    const wrapper = document.createElement("div");
-    wrapper.className = "pdf-page-wrapper";
-    wrapper.style.width = `${Math.floor(viewport.width)}px`;
-
-    const canvas = document.createElement("canvas");
-    canvas.width = Math.floor(renderViewport.width);
-    canvas.height = Math.floor(renderViewport.height);
-
-    const context = canvas.getContext("2d", { alpha: false });
-    await page.render({ canvasContext: context, viewport: renderViewport }).promise;
-
-    const image = document.createElement("img");
-    image.className = "pdf-page-image";
-    image.alt = `Pagina ${pageNumber} do PDF`;
-    image.width = Math.floor(viewport.width);
-    image.height = Math.floor(viewport.height);
-    image.src = canvas.toDataURL("image/jpeg", 0.92);
-
-    wrapper.append(image);
-    pdfCanvasContainer.appendChild(wrapper);
-  }
+function renderPdfPreview(file) {
+  nativePdfUrl = URL.createObjectURL(file);
+  pdfNativeFrame.src = nativePdfUrl;
 }
 
 function renderExtractedText(pages) {
@@ -280,6 +257,7 @@ function renderExtractedText(pages) {
 async function renderAndExtract(file) {
   clearPdfPreview();
   viewerHint.textContent = `Carregando: ${file.name}`;
+  renderPdfPreview(file);
 
   const data = new Uint8Array(await file.arrayBuffer());
   const doc = await getDocument({ data }).promise;
@@ -293,13 +271,7 @@ async function renderAndExtract(file) {
   }
 
   renderExtractedText(extractedPages);
-
-  try {
-    await renderPdfPreview(doc);
-    viewerHint.textContent = `${file.name} — ${doc.numPages} pagina(s)`;
-  } catch {
-    viewerHint.textContent = `${file.name} — texto carregado, mas a visualizacao falhou.`;
-  }
+  viewerHint.textContent = `${file.name} — ${doc.numPages} pagina(s)`;
 
   return extractedPages.flat();
 }
