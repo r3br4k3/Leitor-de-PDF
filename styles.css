@@ -9,6 +9,23 @@
   --brand-strong: #115e59;
   --alert: #b91c1c;
   --ok: #166534;
+  --card-bg: #ffffffd9;
+  --input-bg: #fff;
+}
+
+body.dark {
+  --bg-1: #0d1f1e;
+  --bg-2: #0f2928;
+  --text: #e2e8f0;
+  --muted: #94a3b8;
+  --panel: rgba(15, 35, 32, 0.92);
+  --stroke: rgba(20, 184, 166, 0.22);
+  --brand: #14b8a6;
+  --brand-strong: #0f766e;
+  --alert: #f87171;
+  --ok: #4ade80;
+  --card-bg: rgba(20, 40, 38, 0.9);
+  --input-bg: #0f2928;
 }
 
 * {
@@ -130,7 +147,7 @@ body {
   justify-content: space-between;
   gap: 12px;
   align-items: center;
-  background: #ffffffd9;
+  background: var(--card-bg);
 }
 
 .address-text {
@@ -141,11 +158,12 @@ body {
 .waze-btn {
   border: 1px solid var(--brand);
   border-radius: 10px;
-  background: #fff;
+  background: var(--input-bg);
   color: var(--brand-strong);
   padding: 8px 10px;
   cursor: pointer;
   font-weight: 600;
+  transition: background 150ms ease, color 150ms ease;
 }
 
 .waze-btn:disabled {
@@ -171,7 +189,7 @@ body {
   min-height: 76vh;
   border: 1px solid var(--stroke);
   border-radius: 12px;
-  background: #fff;
+  background: var(--input-bg);
 }
 
 .pdf-native-frame.is-hidden {
@@ -185,7 +203,7 @@ body {
   border-radius: 12px;
   padding: 14px;
   resize: vertical;
-  background: #fff;
+  background: var(--input-bg);
   color: var(--text);
   font: 500 0.98rem/1.5 "Consolas", "Courier New", monospace;
   white-space: pre-wrap;
@@ -217,4 +235,41 @@ body {
     min-height: 50vh;
     font-size: 1rem;
   }
+}
+
+/* ── Botão Dark Mode ── */
+.dark-toggle {
+  position: fixed;
+  top: 14px;
+  right: 16px;
+  z-index: 999;
+  border: 1px solid var(--stroke);
+  border-radius: 50%;
+  width: 42px;
+  height: 42px;
+  background: var(--panel);
+  backdrop-filter: blur(6px);
+  cursor: pointer;
+  font-size: 1.2rem;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: background 200ms ease, border-color 200ms ease;
+  box-shadow: 0 2px 8px rgba(0,0,0,0.12);
+}
+
+.dark-toggle:hover {
+  background: var(--bg-2);
+}
+
+/* Transição suave ao trocar tema */
+body, .panel, .address-item, .waze-btn, .pdf-native-frame, .pdf-text-output {
+  transition: background 220ms ease, color 220ms ease, border-color 220ms ease;
+}
+
+body.dark {
+  background:
+    radial-gradient(1200px 600px at 15% -10%, #042f2e 0%, transparent 70%),
+    radial-gradient(1000px 600px at 90% 0%, #0d3330 0%, transparent 65%),
+    linear-gradient(160deg, var(--bg-1), var(--bg-2));
 }

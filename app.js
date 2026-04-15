@@ -12,6 +12,21 @@ const openNativeBtn = document.getElementById("openNativeBtn");
 const pdfNativeFrame = document.getElementById("pdfNativeFrame");
 const pdfTextOutput = document.getElementById("pdfTextOutput");
 const viewerHint = document.getElementById("viewerHint");
+const darkToggle = document.getElementById("darkToggle");
+
+// ── Dark Mode ──
+function applyTheme(dark) {
+  document.body.classList.toggle("dark", dark);
+  darkToggle.textContent = dark ? "☀️" : "🌙";
+}
+const prefersDark = window.matchMedia("(prefers-color-scheme: dark)");
+const savedTheme = localStorage.getItem("theme");
+applyTheme(savedTheme ? savedTheme === "dark" : prefersDark.matches);
+darkToggle.addEventListener("click", () => {
+  const isDark = document.body.classList.toggle("dark");
+  darkToggle.textContent = isDark ? "☀️" : "🌙";
+  localStorage.setItem("theme", isDark ? "dark" : "light");
+});
 
 const ROUTE_URL = "https://waze.com/ul";
 let selectedFile = null;
