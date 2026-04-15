@@ -5,11 +5,9 @@ const analyzeBtn = document.getElementById("analyzeBtn");
 const autoOpen = document.getElementById("autoOpen");
 const pdfCanvasContainer = document.getElementById("pdfCanvasContainer");
 const viewerHint = document.getElementById("viewerHint");
-const openNativeBtn = document.getElementById("openNativeBtn");
 
 const ROUTE_URL = "https://waze.com/ul";
 let selectedFile = null;
-let nativePdfUrl = "";
 
 if ("serviceWorker" in navigator) {
   navigator.serviceWorker.register("/sw.js").catch(() => {
@@ -29,15 +27,6 @@ function openInWaze(address) {
 
 function clearPdfPreview() {
   pdfCanvasContainer.innerHTML = "";
-}
-
-function updateNativePdfUrl(file) {
-  if (nativePdfUrl) {
-    URL.revokeObjectURL(nativePdfUrl);
-  }
-
-  nativePdfUrl = URL.createObjectURL(file);
-  openNativeBtn.disabled = false;
 }
 
 function normalizeAddress(line) {
@@ -257,6 +246,15 @@ function renderAddresses(addresses) {
   }
 }
 
+async function renderPageSvg(pdfjsLib, page, viewport) {
+  const operatorList = await page.getOperatorList();
+  const svgGfx = new pdfjsLib.SVGGraphics(page.commonObjs, page.objs);
+  svgGfx.embedFonts = true;
+  const svg = await svgGfx.getSVG(operatorList, viewport);
+  svg.classList.add("pdf-page-svg");
+  return svg;
+}
+
 async function renderAndExtract(file) {
   const pdfjsLib = globalThis.pdfjsLib;
   if (!pdfjsLib) {
@@ -267,7 +265,6 @@ async function renderAndExtract(file) {
     "https://cdnjs.cloudflare.com/ajax/libs/pdf.js/4.4.168/pdf.worker.min.mjs";
 
   clearPdfPreview();
-  updateNativePdfUrl(file);
   viewerHint.textContent = `Carregando: ${file.name}`;
 
   const data = await file.arrayBuffer();
@@ -291,22 +288,38 @@ async function renderAndExtract(file) {
     wrapper.className = "pdf-page-wrapper";
     wrapper.style.width = `${Math.floor(viewport.width)}px`;
     wrapper.style.height = `${Math.floor(viewport.height)}px`;
-
-    // Canvas renderizado em alta resolucao
-    const canvas = document.createElement("canvas");
-    canvas.className = "pdf-page-canvas";
-    canvas.width = Math.floor(renderViewport.width);
-    canvas.height = Math.floor(renderViewport.height);
-    canvas.style.width = `${Math.floor(viewport.width)}px`;
-    canvas.style.height = `${Math.floor(viewport.height)}px`;
-
-    wrapper.append(canvas);
-    pdfCanvasContainer.appendChild(wrapper);
-
-    const context = canvas.getContext("2d", { alpha: false });
     const textContent = await page.getTextContent();
 
-    await page.render({ canvasContext: context, viewport: renderViewport }).promise;
+    if (typeof pdfjsLib.SVGGraphics === "function") {
+      try {
+        const svg = await renderPageSvg(pdfjsLib, page, viewport);
+        wrapper.append(svg);
+      } catch {
+        const canvas = document.createElement("canvas");
+        canvas.className = "pdf-page-canvas";
+        canvas.width = Math.floor(renderViewport.width);
+        canvas.height = Math.floor(renderViewport.height);
+        canvas.style.width = `${Math.floor(viewport.width)}px`;
+        canvas.style.height = `${Math.floor(viewport.height)}px`;
+
+        const context = canvas.getContext("2d", { alpha: false });
+        await page.render({ canvasContext: context, viewport: renderViewport }).promise;
+        wrapper.append(canvas);
+      }
+    } else {
+      const canvas = document.createElement("canvas");
+      canvas.className = "pdf-page-canvas";
+      canvas.width = Math.floor(renderViewport.width);
+      canvas.height = Math.floor(renderViewport.height);
+      canvas.style.width = `${Math.floor(viewport.width)}px`;
+      canvas.style.height = `${Math.floor(viewport.height)}px`;
+
+      const context = canvas.getContext("2d", { alpha: false });
+      await page.render({ canvasContext: context, viewport: renderViewport }).promise;
+      wrapper.append(canvas);
+    }
+
+    pdfCanvasContainer.appendChild(wrapper);
 
     allLines.push(...extractPageLines(textContent.items));
   }
@@ -314,19 +327,6 @@ async function renderAndExtract(file) {
   viewerHint.textContent = `${file.name} — ${doc.numPages} pagina(s)`;
   return allLines;
 }
-
-openNativeBtn.addEventListener("click", () => {
-  if (!nativePdfUrl) {
-    setStatus("Carregue um PDF antes de abrir no visualizador nativo.", "error");
-    return;
-  }
-
-  const win = window.open(nativePdfUrl, "_blank", "noopener,noreferrer");
-  if (!win) {
-    // Fallback para navegadores que bloqueiam popup.
-    window.location.href = nativePdfUrl;
-  }
-});
 
 async function analyzeFile(file) {
   setStatus("Lendo PDF...", "");
@@ -380,12 +380,6 @@ async function handleIncomingFile(file) {
 
   await analyzeFile(file);
 }
-
-window.addEventListener("beforeunload", () => {
-  if (nativePdfUrl) {
-    URL.revokeObjectURL(nativePdfUrl);
-  }
-});
 
 if ("launchQueue" in window) {
   window.launchQueue.setConsumer(async (launchParams) => {
