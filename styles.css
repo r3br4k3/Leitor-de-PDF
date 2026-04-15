@@ -156,7 +156,14 @@ body {
 .viewer-actions {
   display: flex;
   justify-content: flex-end;
+  flex-wrap: wrap;
+  gap: 8px;
   margin-bottom: 10px;
+}
+
+.viewer-mode-btn.active {
+  background: linear-gradient(120deg, var(--brand), var(--brand-strong));
+  color: #fff;
 }
 
 .pdf-native-frame {
@@ -165,6 +172,10 @@ body {
   border: 1px solid var(--stroke);
   border-radius: 12px;
   background: #fff;
+}
+
+.pdf-native-frame.is-hidden {
+  display: none;
 }
 
 .pdf-text-output {
@@ -180,6 +191,11 @@ body {
   white-space: pre-wrap;
   user-select: text;
   -webkit-user-select: text;
+  display: none;
+}
+
+.pdf-text-output.is-visible {
+  display: block;
 }
 
 @media (max-width: 700px) {

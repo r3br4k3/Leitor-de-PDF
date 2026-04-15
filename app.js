@@ -5,6 +5,8 @@ const addressList = document.getElementById("addressList");
 const pdfInput = document.getElementById("pdfInput");
 const analyzeBtn = document.getElementById("analyzeBtn");
 const autoOpen = document.getElementById("autoOpen");
+const viewStandardBtn = document.getElementById("viewStandardBtn");
+const viewTextBtn = document.getElementById("viewTextBtn");
 const openNativeBtn = document.getElementById("openNativeBtn");
 const pdfNativeFrame = document.getElementById("pdfNativeFrame");
 const pdfTextOutput = document.getElementById("pdfTextOutput");
@@ -14,6 +16,7 @@ const ROUTE_URL = "https://waze.com/ul";
 let selectedFile = null;
 let activePdfDocument = null;
 let nativePdfUrl = "";
+let viewerMode = window.matchMedia("(max-width: 700px)").matches ? "text" : "standard";
 
 GlobalWorkerOptions.workerSrc = "https://cdn.jsdelivr.net/npm/pdfjs-dist@4.8.69/legacy/build/pdf.worker.min.mjs";
 
@@ -33,6 +36,16 @@ function openInWaze(address) {
   window.location.href = target;
 }
 
+function setViewerMode(mode) {
+  viewerMode = mode;
+  const showText = mode === "text";
+
+  pdfTextOutput.classList.toggle("is-visible", showText);
+  pdfNativeFrame.classList.toggle("is-hidden", showText);
+  viewTextBtn.classList.toggle("active", showText);
+  viewStandardBtn.classList.toggle("active", !showText);
+}
+
 function clearPdfPreview() {
   if (activePdfDocument) {
     activePdfDocument.destroy().catch(() => {
@@ -49,6 +62,7 @@ function clearPdfPreview() {
   pdfNativeFrame.removeAttribute("src");
   openNativeBtn.disabled = true;
   pdfTextOutput.value = "";
+  setViewerMode(viewerMode);
 }
 
 function normalizeAddress(line) {
@@ -339,6 +353,14 @@ openNativeBtn.addEventListener("click", () => {
   }
 });
 
+viewStandardBtn.addEventListener("click", () => {
+  setViewerMode("standard");
+});
+
+viewTextBtn.addEventListener("click", () => {
+  setViewerMode("text");
+});
+
 async function handleIncomingFile(file) {
   if (!file || file.type !== "application/pdf") return;
 
@@ -360,3 +382,5 @@ if ("launchQueue" in window) {
     }
   });
 }
+
+setViewerMode(viewerMode);

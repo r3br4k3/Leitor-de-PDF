@@ -38,14 +38,11 @@
         <h2>2) Visualizar PDF</h2>
         <p id="viewerHint" class="muted">Nenhum PDF carregado.</p>
         <div class="viewer-actions">
+          <button id="viewStandardBtn" class="waze-btn viewer-mode-btn" type="button">Visual padrao</button>
+          <button id="viewTextBtn" class="waze-btn viewer-mode-btn" type="button">Texto copiavel</button>
           <button id="openNativeBtn" class="waze-btn" type="button" disabled>Abrir no padrao</button>
         </div>
         <iframe id="pdfNativeFrame" class="pdf-native-frame" title="Visualizacao padrao do PDF"></iframe>
-      </section>
-
-      <section class="panel" id="textPanel">
-        <h2>3) Texto do PDF para copiar</h2>
-        <p class="muted">Segure o dedo sobre o texto abaixo para selecionar e copiar apenas o trecho desejado.</p>
         <textarea id="pdfTextOutput" class="pdf-text-output" readonly spellcheck="false"></textarea>
       </section>
 
@@ -54,7 +51,7 @@
       </section>
 
       <section class="panel" id="resultsPanel">
-        <h2>4) Enderecos encontrados</h2>
+        <h2>3) Enderecos encontrados</h2>
         <ul id="addressList" class="address-list"></ul>
       </section>
 
