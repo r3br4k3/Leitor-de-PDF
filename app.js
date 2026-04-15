@@ -1,14 +1,12 @@
 import { getDocument, GlobalWorkerOptions } from "pdfjs-dist/legacy/build/pdf.mjs";
-import { EventBus, PDFLinkService, PDFViewer } from "pdfjs-dist/legacy/web/pdf_viewer.mjs";
-import "pdfjs-dist/legacy/web/pdf_viewer.css";
 
 const statusPanel = document.getElementById("statusPanel");
 const addressList = document.getElementById("addressList");
 const pdfInput = document.getElementById("pdfInput");
 const analyzeBtn = document.getElementById("analyzeBtn");
 const autoOpen = document.getElementById("autoOpen");
-const pdfViewerContainer = document.getElementById("pdfViewerContainer");
-const pdfViewerElement = document.getElementById("pdfViewer");
+const pdfCanvasContainer = document.getElementById("pdfCanvasContainer");
+const pdfTextOutput = document.getElementById("pdfTextOutput");
 const viewerHint = document.getElementById("viewerHint");
 
 const ROUTE_URL = "https://waze.com/ul";
@@ -17,24 +15,9 @@ let activePdfDocument = null;
 
 GlobalWorkerOptions.workerSrc = new URL("pdfjs-dist/legacy/build/pdf.worker.mjs", import.meta.url).toString();
 
-const eventBus = new EventBus();
-const linkService = new PDFLinkService({ eventBus });
-const pdfViewer = new PDFViewer({
-  container: pdfViewerContainer,
-  viewer: pdfViewerElement,
-  eventBus,
-  linkService,
-  textLayerMode: 1,
-  removePageBorders: false,
-});
-linkService.setViewer(pdfViewer);
-eventBus.on("pagesinit", () => {
-  pdfViewer.currentScaleValue = "page-width";
-});
-
 if ("serviceWorker" in navigator) {
   navigator.serviceWorker.register("/sw.js").catch(() => {
-    // Registro do SW e opcional; o app continua sem cache offline.
+    // Registro opcional; o app continua funcionando sem cache offline.
   });
 }
 
@@ -56,34 +39,28 @@ function clearPdfPreview() {
     activePdfDocument = null;
   }
 
-  pdfViewer.setDocument(null);
-  linkService.setDocument(null);
-  pdfViewerElement.innerHTML = "";
+  pdfCanvasContainer.innerHTML = "";
+  pdfTextOutput.value = "";
 }
 
 function normalizeAddress(line) {
-  return line
-    .replace(/\s+/g, " ")
-    .replace(/[|]+/g, " ")
-    .trim();
+  return line.replace(/\s+/g, " ").replace(/[|]+/g, " ").trim();
 }
 
-// ─── Padroes de deteccao ────────────────────────────────────────────────────
-
 const RGX = {
-  street:   /\b(rua|r\.|av\.?|avenida|travessa|trav\.?|estrada|rodovia|alameda|praca|pca\.?|largo|viela|logradouro|condominio|cond\.?|quadra|qd\.?|lote|lt\.?)\b/i,
-  number:   /\bn[o°º]?\s*[:\.]?\s*\d{1,5}\b|\b\d{1,5}\s*[,\-\/]\s*|\bno\.?\s*\d{1,5}\b|\bnumero\s*\d{1,5}\b/i,
-  cep:      /\b\d{5}-?\d{3}\b/,
-  bairro:   /\b(bairro|bro\.?|vila|jardim|jd\.?|parque|pk\.?|setor|residencial|res\.?|conjunto|cj\.?)\b/i,
-  cidade:   /\b[A-Za-zÀ-ú]{3,}(?:\s+[A-Za-zÀ-ú]{2,})*\s*[-\/,]\s*[A-Z]{2}\b/,
-  label:    /\b(endere[cç]o|local|localidade|destino|instalacao|entrega|cobranca|correspondencia)\s*[:\-]?/i,
-  cnpj:     /\b\d{2}\.\d{3}\.\d{3}\/\d{4}-\d{2}\b/,
-  cpf:      /\b\d{3}\.\d{3}\.\d{3}-\d{2}\b/,
-  fone:     /\(?\d{2}\)?\s*\d{4,5}-?\d{4}/,
-  cepSolo:  /^\d{5}-?\d{3}$/,
-  numOnly:  /^\d{1,12}$/,
-  url:      /https?:\/\/|www\./i,
-  email:    /@\w+\.\w+/,
+  street: /\b(rua|r\.|av\.?|avenida|travessa|trav\.?|estrada|rodovia|alameda|praca|pca\.?|largo|viela|logradouro|condominio|cond\.?|quadra|qd\.?|lote|lt\.?)\b/i,
+  number: /\bn[o°º]?\s*[:\.]?\s*\d{1,5}\b|\b\d{1,5}\s*[,\-\/]\s*|\bno\.?\s*\d{1,5}\b|\bnumero\s*\d{1,5}\b/i,
+  cep: /\b\d{5}-?\d{3}\b/,
+  bairro: /\b(bairro|bro\.?|vila|jardim|jd\.?|parque|pk\.?|setor|residencial|res\.?|conjunto|cj\.?)\b/i,
+  cidade: /\b[A-Za-zÀ-ú]{3,}(?:\s+[A-Za-zÀ-ú]{2,})*\s*[-\/,]\s*[A-Z]{2}\b/,
+  label: /\b(endere[cç]o|local|localidade|destino|instalacao|entrega|cobranca|correspondencia)\s*[:\-]?/i,
+  cnpj: /\b\d{2}\.\d{3}\.\d{3}\/\d{4}-\d{2}\b/,
+  cpf: /\b\d{3}\.\d{3}\.\d{3}-\d{2}\b/,
+  fone: /\(?\d{2}\)?\s*\d{4,5}-?\d{4}/,
+  cepSolo: /^\d{5}-?\d{3}$/,
+  numOnly: /^\d{1,12}$/,
+  url: /https?:\/\/|www\./i,
+  email: /@\w+\.\w+/,
 };
 
 const NOISE_LINES = new Set([
@@ -97,114 +74,98 @@ const NOISE_LINES = new Set([
   "0962670669",
 ]);
 
-// ─── Score de uma linha ──────────────────────────────────────────────────────
-
 function scoreLine(line) {
-  const l = line.toLowerCase();
+  const lowered = line.toLowerCase();
   let score = 0;
 
-  // Ruido fixo
-  if (NOISE_LINES.has(l)) return -99;
+  if (NOISE_LINES.has(lowered)) return -99;
+  if (RGX.cnpj.test(lowered)) return -99;
+  if (RGX.cpf.test(lowered)) return -20;
+  if (RGX.url.test(lowered)) return -20;
+  if (RGX.email.test(lowered)) return -20;
+  if (RGX.cepSolo.test(lowered.trim())) return -10;
+  if (RGX.numOnly.test(lowered.trim())) return -10;
+  if (RGX.fone.test(lowered) && lowered.trim().length < 20) return -20;
 
-  // Padroes de ruido genericos
-  if (RGX.cnpj.test(l))   return -99;
-  if (RGX.cpf.test(l))    return -20;
-  if (RGX.url.test(l))    return -20;
-  if (RGX.email.test(l))  return -20;
-  if (RGX.cepSolo.test(l.trim())) return -10; // CEP isolado nao e endereco
-  if (RGX.numOnly.test(l.trim())) return -10;
-  if (RGX.fone.test(l) && l.trim().length < 20) return -20;
-
-  // Pontuacao positiva
-  if (RGX.label.test(l))   score += 30; // Rotulo explicito ("Endereco:")
-  if (RGX.street.test(l))  score += 40; // Tipo de logradouro
-  if (RGX.number.test(l))  score += 20; // Numero predial
-  if (RGX.bairro.test(l))  score += 15; // Bairro/Vila/Jardim
-  if (RGX.cep.test(l))     score += 25; // CEP embutido na linha
-  if (RGX.cidade.test(l))  score += 10; // Cidade - UF
+  if (RGX.label.test(lowered)) score += 30;
+  if (RGX.street.test(lowered)) score += 40;
+  if (RGX.number.test(lowered)) score += 20;
+  if (RGX.bairro.test(lowered)) score += 15;
+  if (RGX.cep.test(lowered)) score += 25;
+  if (RGX.cidade.test(lowered)) score += 10;
 
   return score;
 }
 
-// ─── Janela de contexto em torno de uma ancora ──────────────────────────────
-
 function buildBlock(lines, pivot, radius = 3) {
   const start = Math.max(0, pivot - radius);
-  const end   = Math.min(lines.length - 1, pivot + radius);
+  const end = Math.min(lines.length - 1, pivot + radius);
   const block = [];
 
-  for (let i = start; i <= end; i += 1) {
-    const s = scoreLine(lines[i]);
-    if (s > 0) block.push(lines[i]);
+  for (let index = start; index <= end; index += 1) {
+    if (scoreLine(lines[index]) > 0) block.push(lines[index]);
   }
 
   return block.join(", ").replace(/,\s*,/g, ",").trim();
 }
 
-// ─── Motor principal de deteccao por score ───────────────────────────────────
-
 function findAddresses(linesInput) {
-  const lines = linesInput
-    .map(normalizeAddress)
-    .filter(Boolean);
-
-  const THRESHOLD = 30; // Score minimo para candidato
+  const lines = linesInput.map(normalizeAddress).filter(Boolean);
+  const threshold = 30;
   const usedIndexes = new Set();
   const results = [];
   const seen = new Set();
 
-  // Passo 1 — Ancoras por CEP (precisao alta)
-  for (let i = 0; i < lines.length; i += 1) {
-    if (!RGX.cep.test(lines[i])) continue;
+  for (let index = 0; index < lines.length; index += 1) {
+    if (!RGX.cep.test(lines[index])) continue;
 
-    // Tenta expandir bloco ao redor do CEP
-    const block = buildBlock(lines, i, 3);
+    const block = buildBlock(lines, index, 3);
     const key = block.toLowerCase();
     if (block && !seen.has(key)) {
       seen.add(key);
       results.push({ text: block, score: 100 });
-      for (let k = Math.max(0, i - 3); k <= Math.min(lines.length - 1, i + 3); k++) usedIndexes.add(k);
+      for (let cursor = Math.max(0, index - 3); cursor <= Math.min(lines.length - 1, index + 3); cursor += 1) {
+        usedIndexes.add(cursor);
+      }
     }
   }
 
-  // Passo 2 — Ancoras por rotulo explicito ("Endereco:", "Local:", etc.)
-  for (let i = 0; i < lines.length; i += 1) {
-    if (usedIndexes.has(i)) continue;
-    if (!RGX.label.test(lines[i])) continue;
+  for (let index = 0; index < lines.length; index += 1) {
+    if (usedIndexes.has(index) || !RGX.label.test(lines[index])) continue;
 
-    // Remove o proprio rotulo e usa o restante + proximas linhas
-    const stripped = lines[i].replace(RGX.label, "").trim();
+    const stripped = lines[index].replace(RGX.label, "").trim();
     const parts = stripped ? [stripped] : [];
-    for (let k = i + 1; k <= Math.min(lines.length - 1, i + 3); k++) {
-      const s = scoreLine(lines[k]);
-      if (s > 5) { parts.push(lines[k]); usedIndexes.add(k); }
+    for (let cursor = index + 1; cursor <= Math.min(lines.length - 1, index + 3); cursor += 1) {
+      if (scoreLine(lines[cursor]) > 5) {
+        parts.push(lines[cursor]);
+        usedIndexes.add(cursor);
+      }
     }
+
     const block = parts.join(", ").replace(/,\s*,/g, ",").trim();
     const key = block.toLowerCase();
     if (block && !seen.has(key)) {
       seen.add(key);
       results.push({ text: block, score: 90 });
-      usedIndexes.add(i);
+      usedIndexes.add(index);
     }
   }
 
-  // Passo 3 — Score ponderado linha a linha para o restante
-  for (let i = 0; i < lines.length; i += 1) {
-    if (usedIndexes.has(i)) continue;
+  for (let index = 0; index < lines.length; index += 1) {
+    if (usedIndexes.has(index)) continue;
 
-    const score = scoreLine(lines[i]);
-    if (score < THRESHOLD) continue;
+    const score = scoreLine(lines[index]);
+    if (score < threshold) continue;
 
-    // Agrega linhas vizinhas com score positivo
-    const parts = [lines[i]];
-    for (let k = i + 1; k <= Math.min(lines.length - 1, i + 2); k++) {
-      const s = scoreLine(lines[k]);
-      if (s > 5 && !usedIndexes.has(k)) {
-        parts.push(lines[k]);
-        usedIndexes.add(k);
+    const parts = [lines[index]];
+    for (let cursor = index + 1; cursor <= Math.min(lines.length - 1, index + 2); cursor += 1) {
+      if (scoreLine(lines[cursor]) > 5 && !usedIndexes.has(cursor)) {
+        parts.push(lines[cursor]);
+        usedIndexes.add(cursor);
       }
     }
-    usedIndexes.add(i);
+
+    usedIndexes.add(index);
 
     const block = parts.join(", ").replace(/,\s*,/g, ",").trim();
     const key = block.toLowerCase();
@@ -214,12 +175,10 @@ function findAddresses(linesInput) {
     }
   }
 
-  // Ordena por score (maior primeiro) e retorna
-  return results.sort((a, b) => b.score - a.score).map((r) => r.text);
+  return results.sort((left, right) => right.score - left.score).map((item) => item.text);
 }
 
 function extractPageLines(items) {
-  // Agrupa fragmentos por coordenada Y para recompor linhas reais do PDF.
   const rowsByY = new Map();
 
   for (const item of items) {
@@ -240,7 +199,7 @@ function extractPageLines(items) {
   const lines = [];
 
   for (const y of sortedY) {
-    const tokens = rowsByY.get(String(y)).sort((a, b) => a.x - b.x);
+    const tokens = rowsByY.get(String(y)).sort((left, right) => left.x - right.x);
     const line = tokens.map((token) => token.text).join(" ");
     const normalized = normalizeAddress(line);
     if (normalized) lines.push(normalized);
@@ -253,9 +212,9 @@ function renderAddresses(addresses) {
   addressList.innerHTML = "";
 
   if (!addresses.length) {
-    const li = document.createElement("li");
-    li.textContent = "Nenhum endereco identificado automaticamente.";
-    addressList.appendChild(li);
+    const item = document.createElement("li");
+    item.textContent = "Nenhum endereco identificado automaticamente.";
+    addressList.appendChild(item);
     return;
   }
 
@@ -278,6 +237,42 @@ function renderAddresses(addresses) {
   }
 }
 
+async function renderPdfPreview(doc) {
+  const containerWidth = Math.max(pdfCanvasContainer.clientWidth - 20, 280);
+  const dpr = window.devicePixelRatio || 1;
+
+  for (let pageNumber = 1; pageNumber <= doc.numPages; pageNumber += 1) {
+    const page = await doc.getPage(pageNumber);
+    const baseViewport = page.getViewport({ scale: 1 });
+    const scale = Math.max(containerWidth / baseViewport.width, 0.8);
+    const viewport = page.getViewport({ scale });
+    const renderViewport = page.getViewport({ scale: scale * dpr });
+
+    const wrapper = document.createElement("div");
+    wrapper.className = "pdf-page-wrapper";
+    wrapper.style.width = `${Math.floor(viewport.width)}px`;
+
+    const canvas = document.createElement("canvas");
+    canvas.className = "pdf-page-canvas";
+    canvas.width = Math.floor(renderViewport.width);
+    canvas.height = Math.floor(renderViewport.height);
+    canvas.style.width = `${Math.floor(viewport.width)}px`;
+    canvas.style.height = `${Math.floor(viewport.height)}px`;
+
+    wrapper.append(canvas);
+    pdfCanvasContainer.appendChild(wrapper);
+
+    const context = canvas.getContext("2d", { alpha: false });
+    await page.render({ canvasContext: context, viewport: renderViewport }).promise;
+  }
+}
+
+function renderExtractedText(pages) {
+  pdfTextOutput.value = pages
+    .map((lines, index) => `===== PAGINA ${index + 1} =====\n${lines.join("\n")}`)
+    .join("\n\n");
+}
+
 async function renderAndExtract(file) {
   clearPdfPreview();
   viewerHint.textContent = `Carregando: ${file.name}`;
@@ -285,19 +280,19 @@ async function renderAndExtract(file) {
   const data = await file.arrayBuffer();
   const doc = await getDocument({ data }).promise;
   activePdfDocument = doc;
-  pdfViewer.setDocument(doc);
-  linkService.setDocument(doc);
 
-  const allLines = [];
-
+  const extractedPages = [];
   for (let pageNumber = 1; pageNumber <= doc.numPages; pageNumber += 1) {
     const page = await doc.getPage(pageNumber);
     const textContent = await page.getTextContent();
-    allLines.push(...extractPageLines(textContent.items));
+    extractedPages.push(extractPageLines(textContent.items));
   }
 
+  await renderPdfPreview(doc);
+  renderExtractedText(extractedPages);
   viewerHint.textContent = `${file.name} — ${doc.numPages} pagina(s)`;
-  return allLines;
+
+  return extractedPages.flat();
 }
 
 async function analyzeFile(file) {
@@ -306,7 +301,6 @@ async function analyzeFile(file) {
   try {
     const lines = await renderAndExtract(file);
     const addresses = findAddresses(lines);
-
     renderAddresses(addresses);
 
     if (addresses.length) {
@@ -317,7 +311,7 @@ async function analyzeFile(file) {
     } else {
       setStatus("PDF analisado, mas sem endereco claro para rota.", "error");
     }
-  } catch (error) {
+  } catch {
     clearPdfPreview();
     viewerHint.textContent = "Nao foi possivel exibir o PDF.";
     setStatus("Falha ao analisar PDF. Verifique se o arquivo nao esta protegido.", "error");
