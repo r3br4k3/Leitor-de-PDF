@@ -1,13 +1,33 @@
+import { getDocument, GlobalWorkerOptions } from "pdfjs-dist";
+import { EventBus, PDFLinkService, PDFViewer } from "pdfjs-dist/web/pdf_viewer.mjs";
+import "pdfjs-dist/web/pdf_viewer.css";
+
 const statusPanel = document.getElementById("statusPanel");
 const addressList = document.getElementById("addressList");
 const pdfInput = document.getElementById("pdfInput");
 const analyzeBtn = document.getElementById("analyzeBtn");
 const autoOpen = document.getElementById("autoOpen");
-const pdfCanvasContainer = document.getElementById("pdfCanvasContainer");
+const pdfViewerContainer = document.getElementById("pdfViewerContainer");
+const pdfViewerElement = document.getElementById("pdfViewer");
 const viewerHint = document.getElementById("viewerHint");
 
 const ROUTE_URL = "https://waze.com/ul";
 let selectedFile = null;
+let activePdfDocument = null;
+
+GlobalWorkerOptions.workerSrc = new URL("pdfjs-dist/build/pdf.worker.mjs", import.meta.url).toString();
+
+const eventBus = new EventBus();
+const linkService = new PDFLinkService({ eventBus });
+const pdfViewer = new PDFViewer({
+  container: pdfViewerContainer,
+  viewer: pdfViewerElement,
+  eventBus,
+  linkService,
+  textLayerMode: 1,
+  removePageBorders: false,
+});
+linkService.setViewer(pdfViewer);
 
 if ("serviceWorker" in navigator) {
   navigator.serviceWorker.register("/sw.js").catch(() => {
@@ -26,7 +46,8 @@ function openInWaze(address) {
 }
 
 function clearPdfPreview() {
-  pdfCanvasContainer.innerHTML = "";
+  pdfViewer.setDocument(null);
+  pdfViewerElement.innerHTML = "";
 }
 
 function normalizeAddress(line) {
@@ -247,80 +268,25 @@ function renderAddresses(addresses) {
 }
 
 async function renderPageSvg(pdfjsLib, page, viewport) {
-  const operatorList = await page.getOperatorList();
-  const svgGfx = new pdfjsLib.SVGGraphics(page.commonObjs, page.objs);
-  svgGfx.embedFonts = true;
-  const svg = await svgGfx.getSVG(operatorList, viewport);
-  svg.classList.add("pdf-page-svg");
-  return svg;
+  return null;
 }
 
 async function renderAndExtract(file) {
-  const pdfjsLib = globalThis.pdfjsLib;
-  if (!pdfjsLib) {
-    throw new Error("Biblioteca PDF.js nao carregou.");
-  }
-
-  pdfjsLib.GlobalWorkerOptions.workerSrc =
-    "https://cdnjs.cloudflare.com/ajax/libs/pdf.js/4.4.168/pdf.worker.min.mjs";
-
   clearPdfPreview();
   viewerHint.textContent = `Carregando: ${file.name}`;
 
   const data = await file.arrayBuffer();
-  const doc = await pdfjsLib.getDocument({ data }).promise;
-  const containerWidth = Math.max(pdfCanvasContainer.clientWidth - 22, 280);
-  const dpr = window.devicePixelRatio || 1;
+  const doc = await getDocument({ data }).promise;
+  activePdfDocument = doc;
+  linkService.setDocument(doc);
+  pdfViewer.setDocument(doc);
+  pdfViewer.currentScaleValue = "page-width";
+
   const allLines = [];
 
   for (let pageNumber = 1; pageNumber <= doc.numPages; pageNumber += 1) {
     const page = await doc.getPage(pageNumber);
-    const baseViewport = page.getViewport({ scale: 1 });
-    const scale = Math.max(containerWidth / baseViewport.width, 0.8);
-
-    // Viewport em CSS pixels (para texto e dimensoes do wrapper)
-    const viewport = page.getViewport({ scale });
-    // Viewport em pixels fisicos (para canvas nitido em telas Retina/HDPI)
-    const renderViewport = page.getViewport({ scale: scale * dpr });
-
-    // Wrapper posicionado
-    const wrapper = document.createElement("div");
-    wrapper.className = "pdf-page-wrapper";
-    wrapper.style.width = `${Math.floor(viewport.width)}px`;
-    wrapper.style.height = `${Math.floor(viewport.height)}px`;
     const textContent = await page.getTextContent();
-
-    if (typeof pdfjsLib.SVGGraphics === "function") {
-      try {
-        const svg = await renderPageSvg(pdfjsLib, page, viewport);
-        wrapper.append(svg);
-      } catch {
-        const canvas = document.createElement("canvas");
-        canvas.className = "pdf-page-canvas";
-        canvas.width = Math.floor(renderViewport.width);
-        canvas.height = Math.floor(renderViewport.height);
-        canvas.style.width = `${Math.floor(viewport.width)}px`;
-        canvas.style.height = `${Math.floor(viewport.height)}px`;
-
-        const context = canvas.getContext("2d", { alpha: false });
-        await page.render({ canvasContext: context, viewport: renderViewport }).promise;
-        wrapper.append(canvas);
-      }
-    } else {
-      const canvas = document.createElement("canvas");
-      canvas.className = "pdf-page-canvas";
-      canvas.width = Math.floor(renderViewport.width);
-      canvas.height = Math.floor(renderViewport.height);
-      canvas.style.width = `${Math.floor(viewport.width)}px`;
-      canvas.style.height = `${Math.floor(viewport.height)}px`;
-
-      const context = canvas.getContext("2d", { alpha: false });
-      await page.render({ canvasContext: context, viewport: renderViewport }).promise;
-      wrapper.append(canvas);
-    }
-
-    pdfCanvasContainer.appendChild(wrapper);
-
     allLines.push(...extractPageLines(textContent.items));
   }
 

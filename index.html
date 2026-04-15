@@ -37,7 +37,9 @@
       <section class="panel" id="viewerPanel">
         <h2>2) Visualizar PDF</h2>
         <p id="viewerHint" class="muted">Nenhum PDF carregado.</p>
-        <div id="pdfCanvasContainer" class="pdf-canvas-container" aria-label="Visualizacao do PDF"></div>
+        <div id="pdfViewerContainer" class="pdf-viewer-container" aria-label="Visualizacao do PDF">
+          <div id="pdfViewer" class="pdfViewer"></div>
+        </div>
       </section>
 
       <section class="panel status" id="statusPanel" aria-live="polite">
@@ -50,8 +52,6 @@
       </section>
 
     </main>
-
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/4.4.168/pdf.min.mjs" type="module"></script>
     <script type="module" src="app.js"></script>
   </body>
 </html>
