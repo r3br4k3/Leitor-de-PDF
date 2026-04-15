@@ -5,6 +5,7 @@ const addressList = document.getElementById("addressList");
 const pdfInput = document.getElementById("pdfInput");
 const analyzeBtn = document.getElementById("analyzeBtn");
 const autoOpen = document.getElementById("autoOpen");
+const openNativeBtn = document.getElementById("openNativeBtn");
 const pdfNativeFrame = document.getElementById("pdfNativeFrame");
 const pdfTextOutput = document.getElementById("pdfTextOutput");
 const viewerHint = document.getElementById("viewerHint");
@@ -46,6 +47,7 @@ function clearPdfPreview() {
   }
 
   pdfNativeFrame.removeAttribute("src");
+  openNativeBtn.disabled = true;
   pdfTextOutput.value = "";
 }
 
@@ -246,6 +248,7 @@ function renderAddresses(addresses) {
 function renderPdfPreview(file) {
   nativePdfUrl = URL.createObjectURL(file);
   pdfNativeFrame.src = nativePdfUrl;
+  openNativeBtn.disabled = false;
 }
 
 function renderExtractedText(pages) {
@@ -322,6 +325,18 @@ analyzeBtn.addEventListener("click", async () => {
   }
 
   await analyzeFile(file);
+});
+
+openNativeBtn.addEventListener("click", () => {
+  if (!nativePdfUrl) {
+    setStatus("Carregue um PDF antes de abrir no padrao.", "error");
+    return;
+  }
+
+  const popup = window.open(nativePdfUrl, "_blank", "noopener,noreferrer");
+  if (!popup) {
+    window.location.href = nativePdfUrl;
+  }
 });
 
 async function handleIncomingFile(file) {

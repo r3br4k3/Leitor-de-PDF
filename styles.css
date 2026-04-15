@@ -148,6 +148,17 @@ body {
   font-weight: 600;
 }
 
+.waze-btn:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+
+.viewer-actions {
+  display: flex;
+  justify-content: flex-end;
+  margin-bottom: 10px;
+}
+
 .pdf-native-frame {
   width: 100%;
   min-height: 76vh;
