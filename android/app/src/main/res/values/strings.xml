@@ -1,0 +1,7 @@
+<?xml version='1.0' encoding='utf-8'?>
+<resources>
+    <string name="app_name">RotaPDF</string>
+    <string name="title_activity_main">RotaPDF</string>
+    <string name="package_name">com.rotapdf.app</string>
+    <string name="custom_url_scheme">com.rotapdf.app</string>
+</resources>

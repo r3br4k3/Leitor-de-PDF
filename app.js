@@ -1,3 +1,4 @@
+import { Capacitor, registerPlugin } from "@capacitor/core";
 import { getDocument, GlobalWorkerOptions } from "pdfjs-dist/legacy/build/pdf.mjs";
 
 const statusPanel = document.getElementById("statusPanel");
@@ -17,6 +18,9 @@ let selectedFile = null;
 let activePdfDocument = null;
 let nativePdfUrl = "";
 let viewerMode = window.matchMedia("(max-width: 700px)").matches ? "text" : "standard";
+let isCheckingNativePdf = false;
+
+const PdfIntent = registerPlugin("PdfIntent");
 
 GlobalWorkerOptions.workerSrc = "https://cdn.jsdelivr.net/npm/pdfjs-dist@4.8.69/legacy/build/pdf.worker.min.mjs";
 
@@ -265,6 +269,40 @@ function renderPdfPreview(file) {
   openNativeBtn.disabled = false;
 }
 
+function base64ToFile(base64Data, fileName, mimeType) {
+  const binary = atob(base64Data);
+  const bytes = new Uint8Array(binary.length);
+  for (let index = 0; index < binary.length; index += 1) {
+    bytes[index] = binary.charCodeAt(index);
+  }
+
+  return new File([bytes], fileName || "documento.pdf", { type: mimeType || "application/pdf" });
+}
+
+async function loadPendingNativePdf() {
+  if (!Capacitor.isNativePlatform() || isCheckingNativePdf) {
+    return false;
+  }
+
+  isCheckingNativePdf = true;
+
+  try {
+    const result = await PdfIntent.getPendingPdf();
+    if (!result?.hasPayload || !result.data?.base64Data) {
+      return false;
+    }
+
+    const file = base64ToFile(result.data.base64Data, result.data.fileName, result.data.mimeType);
+    await PdfIntent.clearPendingPdf();
+    await handleIncomingFile(file);
+    return true;
+  } catch {
+    return false;
+  } finally {
+    isCheckingNativePdf = false;
+  }
+}
+
 async function loadSharedPdfFromServiceWorker() {
   const response = await fetch("/shared-pdf", { cache: "no-store" });
   if (!response.ok) return false;
@@ -411,6 +449,18 @@ if ("launchQueue" in window) {
 }
 
 setViewerMode(viewerMode);
+
+window.addEventListener("focus", () => {
+  void loadPendingNativePdf();
+});
+
+document.addEventListener("visibilitychange", () => {
+  if (document.visibilityState === "visible") {
+    void loadPendingNativePdf();
+  }
+});
+
+void loadPendingNativePdf();
 
 if ("serviceWorker" in navigator) {
   navigator.serviceWorker.ready
