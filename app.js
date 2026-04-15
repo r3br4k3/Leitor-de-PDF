@@ -8,22 +8,57 @@ const analyzeBtn = document.getElementById("analyzeBtn");
 const autoOpen = document.getElementById("autoOpen");
 const openNativeBtn = document.getElementById("openNativeBtn");
 const pdfCanvasContainer = document.getElementById("pdfCanvasContainer");
+const viewerPanel = document.getElementById("viewerPanel");
 const viewerHint = document.getElementById("viewerHint");
 const darkToggle = document.getElementById("darkToggle");
+
+const requiredNodes = [
+  ["statusPanel", statusPanel],
+  ["addressList", addressList],
+  ["pdfInput", pdfInput],
+  ["analyzeBtn", analyzeBtn],
+  ["autoOpen", autoOpen],
+  ["openNativeBtn", openNativeBtn],
+  ["pdfCanvasContainer", pdfCanvasContainer],
+  ["viewerHint", viewerHint],
+];
+
+const missingNodes = requiredNodes.filter(([, node]) => !node).map(([name]) => name);
+if (missingNodes.length) {
+  console.error("Estrutura da pagina desatualizada. Elementos ausentes:", missingNodes.join(", "));
+
+  const hasRetried = sessionStorage.getItem("rotapdf_cache_recover") === "1";
+  sessionStorage.setItem("rotapdf_cache_recover", "1");
+
+  if (!hasRetried && "caches" in window) {
+    caches
+      .keys()
+      .then((keys) => Promise.all(keys.filter((key) => key.startsWith("rotapdf-")).map((key) => caches.delete(key))))
+      .finally(() => window.location.reload());
+  } else if (!hasRetried) {
+    window.location.reload();
+  }
+
+  throw new Error("Atualizando arquivos do app. Reabra em alguns segundos.");
+}
 
 // ── Dark Mode ──
 function applyTheme(dark) {
   document.body.classList.toggle("dark", dark);
-  darkToggle.textContent = dark ? "☀️" : "🌙";
+  if (darkToggle) {
+    darkToggle.textContent = dark ? "☀️" : "🌙";
+  }
 }
 const prefersDark = window.matchMedia("(prefers-color-scheme: dark)");
 const savedTheme = localStorage.getItem("theme");
 applyTheme(savedTheme ? savedTheme === "dark" : prefersDark.matches);
-darkToggle.addEventListener("click", () => {
-  const isDark = document.body.classList.toggle("dark");
-  darkToggle.textContent = isDark ? "☀️" : "🌙";
-  localStorage.setItem("theme", isDark ? "dark" : "light");
-});
+if (darkToggle) {
+  darkToggle.addEventListener("click", () => {
+    const isDark = document.body.classList.toggle("dark");
+    darkToggle.textContent = isDark ? "☀️" : "🌙";
+    localStorage.setItem("theme", isDark ? "dark" : "light");
+  });
+}
 
 const ROUTE_URL = "https://waze.com/ul";
 let selectedFile = null;
@@ -36,9 +71,34 @@ const PdfIntent = registerPlugin("PdfIntent");
 GlobalWorkerOptions.workerSrc = "https://cdn.jsdelivr.net/npm/pdfjs-dist@4.8.69/legacy/build/pdf.worker.min.mjs";
 
 if ("serviceWorker" in navigator) {
-  navigator.serviceWorker.register("/sw.js").catch(() => {
-    // Registro opcional; o app continua funcionando sem cache offline.
-  });
+  navigator.serviceWorker
+    .register("/sw.js")
+    .then((registration) => {
+      if (registration.waiting) {
+        registration.waiting.postMessage({ type: "SKIP_WAITING" });
+      }
+
+      registration.addEventListener("updatefound", () => {
+        const worker = registration.installing;
+        if (!worker) return;
+
+        worker.addEventListener("statechange", () => {
+          if (worker.state === "installed" && navigator.serviceWorker.controller) {
+            worker.postMessage({ type: "SKIP_WAITING" });
+          }
+        });
+      });
+
+      let refreshed = false;
+      navigator.serviceWorker.addEventListener("controllerchange", () => {
+        if (refreshed) return;
+        refreshed = true;
+        window.location.reload();
+      });
+    })
+    .catch(() => {
+      // Registro opcional; o app continua funcionando sem cache offline.
+    });
 }
 
 function setStatus(message, mode = "") {
@@ -62,8 +122,12 @@ function clearPdfPreview() {
     nativePdfUrl = "";
   }
 
-  pdfCanvasContainer.innerHTML = "";
-  openNativeBtn.disabled = true;
+  if (pdfCanvasContainer) {
+    pdfCanvasContainer.innerHTML = "";
+  }
+  if (openNativeBtn) {
+    openNativeBtn.disabled = true;
+  }
 }
 
 function normalizeAddress(line) {
@@ -260,10 +324,16 @@ function renderAddresses(addresses) {
   }
 }
 
-async function renderPdfCanvases(doc) {
+async function renderPdfImages(doc) {
+  if (!pdfCanvasContainer) {
+    throw new Error("Container de visualizacao nao encontrado.");
+  }
+
   pdfCanvasContainer.innerHTML = "";
-  const containerWidth = pdfCanvasContainer.clientWidth || Math.min(window.innerWidth * 0.88, 880);
-  const dpr = window.devicePixelRatio || 1;
+  const containerWidth =
+    pdfCanvasContainer.clientWidth ||
+    Math.max(280, (viewerPanel?.clientWidth || window.innerWidth) - 36);
+  const dpr = Math.min(window.devicePixelRatio || 1, 2);
 
   for (let pageNumber = 1; pageNumber <= doc.numPages; pageNumber += 1) {
     const page = await doc.getPage(pageNumber);
@@ -271,19 +341,25 @@ async function renderPdfCanvases(doc) {
     const scale = containerWidth / baseViewport.width;
     const viewport = page.getViewport({ scale });
 
-    const canvas = document.createElement("canvas");
-    canvas.className = "pdf-page-canvas";
-    canvas.width = Math.floor(viewport.width * dpr);
-    canvas.height = Math.floor(viewport.height * dpr);
-    canvas.style.width = Math.floor(viewport.width) + "px";
-    canvas.style.height = Math.floor(viewport.height) + "px";
-    pdfCanvasContainer.appendChild(canvas);
+    const offscreen = document.createElement("canvas");
+    offscreen.width = Math.floor(viewport.width * dpr);
+    offscreen.height = Math.floor(viewport.height * dpr);
 
-    const ctx = canvas.getContext("2d");
+    const ctx = offscreen.getContext("2d");
+    if (!ctx) {
+      throw new Error("Nao foi possivel criar contexto de renderizacao.");
+    }
     ctx.scale(dpr, dpr);
     await page.render({ canvasContext: ctx, viewport }).promise;
-  }
 
+    const image = document.createElement("img");
+    image.className = "pdf-page-image";
+    image.alt = `Pagina ${pageNumber} do PDF`;
+    image.loading = "lazy";
+    image.decoding = "async";
+    image.src = offscreen.toDataURL("image/jpeg", 0.92);
+    pdfCanvasContainer.appendChild(image);
+  }
 }
 
 function base64ToFile(base64Data, fileName, mimeType) {
@@ -347,16 +423,10 @@ async function loadSharedPdfFromServiceWorker() {
   return true;
 }
 
-function renderExtractedText(pages) {
-  pdfTextOutput.value = pages
-    .map((lines, index) => `===== PAGINA ${index + 1} =====\n${lines.join("\n")}`)
-    .join("\n\n");
-}
-
 async function renderAndExtract(file) {
   clearPdfPreview();
   viewerHint.textContent = `Carregando: ${file.name}`;
-  renderPdfPreview(file);
+  nativePdfUrl = URL.createObjectURL(file);
 
   const data = new Uint8Array(await file.arrayBuffer());
   const loadingTask = getDocument({
@@ -375,8 +445,19 @@ async function renderAndExtract(file) {
     extractedPages.push(extractPageLines(textContent.items));
   }
 
-  renderExtractedText(extractedPages);
-  viewerHint.textContent = `${file.name} — ${doc.numPages} pagina(s)`;
+  try {
+    await renderPdfImages(doc);
+  } catch {
+    viewerHint.textContent = `${file.name} — nao foi possivel gerar a visualizacao interna.`;
+  }
+  if (openNativeBtn) {
+    openNativeBtn.disabled = false;
+  }
+  if (!pdfCanvasContainer.children.length) {
+    viewerHint.textContent = `${file.name} — use "Abrir no padrao" para visualizar.`;
+  } else {
+    viewerHint.textContent = `${file.name} — ${doc.numPages} pagina(s)`;
+  }
 
   return extractedPages.flat();
 }
@@ -423,17 +504,19 @@ analyzeBtn.addEventListener("click", async () => {
   await analyzeFile(file);
 });
 
-openNativeBtn.addEventListener("click", () => {
-  if (!nativePdfUrl) {
-    setStatus("Carregue um PDF antes de abrir no padrao.", "error");
-    return;
-  }
+if (openNativeBtn) {
+  openNativeBtn.addEventListener("click", () => {
+    if (!nativePdfUrl) {
+      setStatus("Carregue um PDF antes de abrir no padrao.", "error");
+      return;
+    }
 
-  const popup = window.open(nativePdfUrl, "_blank", "noopener,noreferrer");
-  if (!popup) {
-    window.location.href = nativePdfUrl;
-  }
-});
+    const popup = window.open(nativePdfUrl, "_blank", "noopener,noreferrer");
+    if (!popup) {
+      window.location.href = nativePdfUrl;
+    }
+  });
+}
 
 async function handleIncomingFile(file) {
   if (!file || file.type !== "application/pdf") return;

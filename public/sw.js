@@ -1,7 +1,8 @@
-const CACHE_NAME = "rotapdf-v2";
+const CACHE_NAME = "rotapdf-v3";
 const SHARED_CACHE_NAME = "rotapdf-shared-v1";
 const SHARED_FILE_URL = "/shared-pdf";
 const APP_ASSETS = ["/", "/index.html", "/styles.css", "/app.js", "/manifest.webmanifest", "/icons/icon.svg"];
+const APP_SHELL_PATHS = new Set(APP_ASSETS);
 
 self.addEventListener("install", (event) => {
   event.waitUntil(
@@ -22,6 +23,11 @@ self.addEventListener("activate", (event) => {
 });
 
 self.addEventListener("message", (event) => {
+  if (event.data?.type === "SKIP_WAITING") {
+    self.skipWaiting();
+    return;
+  }
+
   if (event.data?.type !== "DELETE_SHARED_PDF") return;
 
   event.waitUntil(
@@ -63,6 +69,23 @@ self.addEventListener("fetch", (event) => {
         const cached = await cache.match(SHARED_FILE_URL);
         return cached || new Response("Nao encontrado", { status: 404 });
       })
+    );
+    return;
+  }
+
+  // Network-first no shell evita ficar preso em JS/HTML antigos no PWA.
+  if (APP_SHELL_PATHS.has(url.pathname)) {
+    event.respondWith(
+      fetch(event.request)
+        .then((response) => {
+          const copy = response.clone();
+          caches.open(CACHE_NAME).then((cache) => cache.put(event.request, copy));
+          return response;
+        })
+        .catch(async () => {
+          const cached = await caches.match(event.request);
+          return cached || caches.match("/index.html");
+        })
     );
     return;
   }
