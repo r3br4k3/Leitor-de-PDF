@@ -238,8 +238,8 @@ function renderAddresses(addresses) {
 }
 
 async function renderPdfPreview(doc) {
-  const containerWidth = Math.max(pdfCanvasContainer.clientWidth - 20, 280);
-  const dpr = window.devicePixelRatio || 1;
+  const containerWidth = Math.min(Math.max(pdfCanvasContainer.clientWidth - 20, 280), 900);
+  const dpr = Math.min(window.devicePixelRatio || 1, 1.25);
 
   for (let pageNumber = 1; pageNumber <= doc.numPages; pageNumber += 1) {
     const page = await doc.getPage(pageNumber);
@@ -277,7 +277,7 @@ async function renderAndExtract(file) {
   clearPdfPreview();
   viewerHint.textContent = `Carregando: ${file.name}`;
 
-  const data = await file.arrayBuffer();
+  const data = new Uint8Array(await file.arrayBuffer());
   const doc = await getDocument({ data }).promise;
   activePdfDocument = doc;
 
@@ -288,9 +288,14 @@ async function renderAndExtract(file) {
     extractedPages.push(extractPageLines(textContent.items));
   }
 
-  await renderPdfPreview(doc);
   renderExtractedText(extractedPages);
-  viewerHint.textContent = `${file.name} — ${doc.numPages} pagina(s)`;
+
+  try {
+    await renderPdfPreview(doc);
+    viewerHint.textContent = `${file.name} — ${doc.numPages} pagina(s)`;
+  } catch {
+    viewerHint.textContent = `${file.name} — texto carregado, mas a visualizacao falhou.`;
+  }
 
   return extractedPages.flat();
 }
@@ -311,7 +316,8 @@ async function analyzeFile(file) {
     } else {
       setStatus("PDF analisado, mas sem endereco claro para rota.", "error");
     }
-  } catch {
+  } catch (error) {
+    console.error("Falha ao analisar PDF:", error);
     clearPdfPreview();
     viewerHint.textContent = "Nao foi possivel exibir o PDF.";
     setStatus("Falha ao analisar PDF. Verifique se o arquivo nao esta protegido.", "error");
