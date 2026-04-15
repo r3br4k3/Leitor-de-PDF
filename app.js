@@ -253,17 +253,21 @@ async function renderPdfPreview(doc) {
     wrapper.style.width = `${Math.floor(viewport.width)}px`;
 
     const canvas = document.createElement("canvas");
-    canvas.className = "pdf-page-canvas";
     canvas.width = Math.floor(renderViewport.width);
     canvas.height = Math.floor(renderViewport.height);
-    canvas.style.width = `${Math.floor(viewport.width)}px`;
-    canvas.style.height = `${Math.floor(viewport.height)}px`;
-
-    wrapper.append(canvas);
-    pdfCanvasContainer.appendChild(wrapper);
 
     const context = canvas.getContext("2d", { alpha: false });
     await page.render({ canvasContext: context, viewport: renderViewport }).promise;
+
+    const image = document.createElement("img");
+    image.className = "pdf-page-image";
+    image.alt = `Pagina ${pageNumber} do PDF`;
+    image.width = Math.floor(viewport.width);
+    image.height = Math.floor(viewport.height);
+    image.src = canvas.toDataURL("image/jpeg", 0.92);
+
+    wrapper.append(image);
+    pdfCanvasContainer.appendChild(wrapper);
   }
 }
 
