@@ -265,6 +265,33 @@ function renderPdfPreview(file) {
   openNativeBtn.disabled = false;
 }
 
+async function loadSharedPdfFromServiceWorker() {
+  const response = await fetch("/shared-pdf", { cache: "no-store" });
+  if (!response.ok) return false;
+
+  const contentType = response.headers.get("Content-Type") || "application/pdf";
+  if (!contentType.includes("pdf")) return false;
+
+  const fileNameHeader = response.headers.get("X-File-Name");
+  const fileName = fileNameHeader ? decodeURIComponent(fileNameHeader) : "documento.pdf";
+  const blob = await response.blob();
+  const file = new File([blob], fileName, { type: contentType });
+
+  await handleIncomingFile(file);
+
+  if (navigator.serviceWorker.controller) {
+    navigator.serviceWorker.controller.postMessage({ type: "DELETE_SHARED_PDF" });
+  }
+
+  const url = new URL(window.location.href);
+  if (url.searchParams.has("shared")) {
+    url.searchParams.delete("shared");
+    history.replaceState({}, "", `${url.pathname}${url.search}` || url.pathname);
+  }
+
+  return true;
+}
+
 function renderExtractedText(pages) {
   pdfTextOutput.value = pages
     .map((lines, index) => `===== PAGINA ${index + 1} =====\n${lines.join("\n")}`)
@@ -384,3 +411,15 @@ if ("launchQueue" in window) {
 }
 
 setViewerMode(viewerMode);
+
+if ("serviceWorker" in navigator) {
+  navigator.serviceWorker.ready
+    .then(async () => {
+      if (window.location.search.includes("shared=1")) {
+        await loadSharedPdfFromServiceWorker();
+      }
+    })
+    .catch(() => {
+      // Ignora falhas no bootstrap do compartilhamento.
+    });
+}
