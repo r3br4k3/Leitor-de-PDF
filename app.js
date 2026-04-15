@@ -260,7 +260,13 @@ async function renderAndExtract(file) {
   renderPdfPreview(file);
 
   const data = new Uint8Array(await file.arrayBuffer());
-  const doc = await getDocument({ data }).promise;
+  const loadingTask = getDocument({
+    data,
+    disableWorker: true,
+    isEvalSupported: false,
+    useSystemFonts: true,
+  });
+  const doc = await loadingTask.promise;
   activePdfDocument = doc;
 
   const extractedPages = [];
@@ -296,7 +302,8 @@ async function analyzeFile(file) {
     console.error("Falha ao analisar PDF:", error);
     clearPdfPreview();
     viewerHint.textContent = "Nao foi possivel exibir o PDF.";
-    setStatus("Falha ao analisar PDF. Verifique se o arquivo nao esta protegido.", "error");
+    const message = error instanceof Error && error.message ? error.message : "Erro desconhecido ao abrir o PDF.";
+    setStatus(`Falha ao analisar PDF: ${message}`, "error");
   }
 }
 
