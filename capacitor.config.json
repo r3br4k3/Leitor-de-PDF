@@ -1,5 +1,9 @@
 {
   "appId": "com.rotapdf.app",
   "appName": "RotaPDF",
-  "webDir": "dist"
+  "webDir": "dist",
+  "server": {
+    "url": "https://lightgreen-albatross-768585.hostingersite.com",
+    "cleartext": false
+  }
 }
